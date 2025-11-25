@@ -117,11 +117,11 @@ Commit message format:
 - `chore` - Maintenance tasks
 
 **Scopes:**
-`core` - Core authentication logic
-`fiber` - Fiber adapter
-`postgres` - PostgreSQL adapter
-`examples` - Example code
-`ci` - CI/CD changes
+- `core` - Core authentication logic
+- `fiber` - Fiber adapter
+- `postgres` - PostgreSQL adapter
+- `examples` - Example code
+- `ci` - CI/CD changes
 
 
 ## Project Structure
@@ -130,7 +130,6 @@ Commit message format:
 ├── core/           # Framework-agnostic logic (no external dependencies)
 ├── adapters/       # Database and HTTP adapters
 ├── examples/       # Example applications
-└── migrations/     # Database migrations
 ```
 
 ## License
