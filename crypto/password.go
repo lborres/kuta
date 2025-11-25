@@ -57,8 +57,6 @@ func (a *Argon2) Hash(password string) (string, error) {
 		a.KeyLength,
 	)
 
-	println(hash)
-
 	// WARN: hard-coded argon2id string. Only valid due to using argon2.IDKey()
 	encoded := fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
 		argon2.Version,
