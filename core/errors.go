@@ -12,9 +12,11 @@ var (
 
 	// Session errors
 
+	ErrInvalidToken    = errors.New("invalid session token")
 	ErrSessionNotFound = errors.New("session not found")
 	ErrSessionExpired  = errors.New("session expired")
 	ErrUnauthorized    = errors.New("unauthorized")
+	ErrCacheNotFound   = errors.New("session not found in cache")
 
 	// Validation errors
 
