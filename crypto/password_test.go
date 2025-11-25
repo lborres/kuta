@@ -21,7 +21,7 @@ func setupPasswordHash(t *testing.T, password string) (*Argon2, string) {
 	return a, hash
 }
 
-func TestArgon2_Hash(t *testing.T) {
+func TestArgon2Hash(t *testing.T) {
 	t.Run("format validation", func(t *testing.T) {
 		_, hash := setupPasswordHash(t, "testPassword123")
 
@@ -92,7 +92,7 @@ func TestArgon2_Hash(t *testing.T) {
 	})
 }
 
-func TestArgon2_Hash_SecurityProperties(t *testing.T) {
+func TestArgon2HashSecurityProperties(t *testing.T) {
 	t.Run("uses constant time comparison in Verify", func(t *testing.T) {
 		// This is implicit in the implementation, but we can verify behavior
 		a := setupArgon2(t)
@@ -125,7 +125,7 @@ func TestArgon2_Hash_SecurityProperties(t *testing.T) {
 	})
 }
 
-func TestArgon2_Verify_CrossInstanceCompatibility(t *testing.T) {
+func TestArgon2VerifyCrossInstanceCompatibility(t *testing.T) {
 	t.Run("verifies hash created by different instance", func(t *testing.T) {
 		// Arrange
 		a1 := NewArgon2()
@@ -171,9 +171,8 @@ func TestArgon2_Verify_CrossInstanceCompatibility(t *testing.T) {
 	})
 }
 
-func TestArgon2_Hash_CustomParameters(t *testing.T) {
+func TestArgon2HashCustomParameters(t *testing.T) {
 	t.Run("respects custom memory setting", func(t *testing.T) {
-		// Arrange
 		expected := uint32(32 * 1024)
 		a := &Argon2{
 			Memory:      expected,
@@ -183,11 +182,9 @@ func TestArgon2_Hash_CustomParameters(t *testing.T) {
 			KeyLength:   32,
 		}
 
-		// Act
 		hash, _ := a.Hash("test")
 		params, _, _, _ := decodeArgon2Hash(hash)
 
-		// Assert
 		actual := params.Memory
 		if actual != expected {
 			t.Errorf("Memory = %d, expected %d", actual, expected)
@@ -195,7 +192,6 @@ func TestArgon2_Hash_CustomParameters(t *testing.T) {
 	})
 
 	t.Run("respects custom iterations setting", func(t *testing.T) {
-		// Arrange
 		expected := uint32(5)
 		a := &Argon2{
 			Memory:      64 * 1024,
@@ -205,11 +201,9 @@ func TestArgon2_Hash_CustomParameters(t *testing.T) {
 			KeyLength:   32,
 		}
 
-		// Act
 		hash, _ := a.Hash("test")
 		params, _, _, _ := decodeArgon2Hash(hash)
 
-		// Assert
 		actual := params.Iterations
 		if actual != expected {
 			t.Errorf("Iterations = %d, expected %d", actual, expected)
@@ -271,11 +265,9 @@ func TestArgon2_Hash_CustomParameters(t *testing.T) {
 			KeyLength:   uint32(expected),
 		}
 
-		// Act
 		hash, _ := a.Hash("test")
 		_, _, hashBytes, _ := decodeArgon2Hash(hash)
 
-		// Assert
 		actual := len(hashBytes)
 		if actual != expected {
 			t.Errorf("Key length = %d, expected %d", actual, expected)
@@ -283,7 +275,7 @@ func TestArgon2_Hash_CustomParameters(t *testing.T) {
 	})
 }
 
-func TestArgon2_Verify(t *testing.T) {
+func TestArgon2Verify(t *testing.T) {
 	t.Run("password validation", func(t *testing.T) {
 		password := "correctPassword"
 		a, hash := setupPasswordHash(t, password)
@@ -337,7 +329,7 @@ func TestArgon2_Verify(t *testing.T) {
 	})
 }
 
-func TestArgon2_Verify_EdgeCases(t *testing.T) {
+func TestArgon2VerifyEdgeCases(t *testing.T) {
 	t.Run("handles very long passwords", func(t *testing.T) {
 		// Arrange
 		a := setupArgon2(t)
@@ -394,8 +386,7 @@ func TestArgon2_Verify_EdgeCases(t *testing.T) {
 	})
 }
 
-func TestDecodeArgon2Hash(t *testing.T) {
-	// Shared setup
+func TestArgon2DecodeHash(t *testing.T) {
 	_, hash := setupPasswordHash(t, "test")
 	params, salt, hashBytes, err := decodeArgon2Hash(hash)
 	if err != nil {
@@ -449,7 +440,7 @@ func TestDecodeArgon2Hash(t *testing.T) {
 	}
 }
 
-func TestDecodeArgon2Hash_ErrorCases(t *testing.T) {
+func TestArgon2DecodeHashErrorCases(t *testing.T) {
 	tests := []struct {
 		name          string
 		hash          string
@@ -494,10 +485,7 @@ func TestDecodeArgon2Hash_ErrorCases(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Act
 			_, _, _, err := decodeArgon2Hash(test.hash)
-
-			// Assert
 			if err == nil {
 				t.Errorf("Should return error for %s", test.name)
 			}
@@ -508,7 +496,7 @@ func TestDecodeArgon2Hash_ErrorCases(t *testing.T) {
 	}
 }
 
-func TestNewArgon2(t *testing.T) {
+func TestArgon2New(t *testing.T) {
 	a := setupArgon2(t)
 
 	tests := []struct {
@@ -532,14 +520,12 @@ func TestNewArgon2(t *testing.T) {
 	}
 }
 
-func TestArgon2_ConcurrentUsage(t *testing.T) {
+func TestArgon2ConcurrentUsage(t *testing.T) {
 	t.Run("handles concurrent hashing", func(t *testing.T) {
-		// Arrange
 		a := setupArgon2(t)
 		const goroutines = 10
 		errors := make(chan error, goroutines)
 
-		// Act - hash concurrently
 		for i := 0; i < goroutines; i++ {
 			go func(n int) {
 				password := strings.Repeat("a", n+1)
@@ -561,7 +547,6 @@ func TestArgon2_ConcurrentUsage(t *testing.T) {
 			}(i)
 		}
 
-		// Assert - collect results
 		for i := 0; i < goroutines; i++ {
 			if err := <-errors; err != nil {
 				t.Errorf("Concurrent operation failed: %v", err)
