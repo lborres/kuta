@@ -49,7 +49,7 @@ func NewNanoID() *NanoIDGenerator {
 	}
 }
 
-func (n *NanoIDGenerator) New(length ...int) (string, error) {
+func (n *NanoIDGenerator) Generate(length ...int) (string, error) {
 	size := defaultSize
 	if len(length) > 0 && length[0] > 0 {
 		size = length[0]

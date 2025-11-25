@@ -42,8 +42,7 @@ func GenerateHashedToken(byteLength int) (*TokenPair, error) {
 		return nil, err
 	}
 
-	hash := sha256.Sum256([]byte(token))
-	hashedToken := hex.EncodeToString(hash[:])
+	hashedToken := HashToken(token)
 
 	return &TokenPair{
 		Token: token,
@@ -56,9 +55,13 @@ func VerifyToken(token, storedHash string) (bool, error) {
 		return false, errors.New("token and hash cannot be empty")
 	}
 
-	hash := sha256.Sum256([]byte(token))
-	tokenHash := hex.EncodeToString(hash[:])
+	tokenHash := HashToken(token)
 
 	// Constant-time comparison to prevent timing attacks
 	return subtle.ConstantTimeCompare([]byte(tokenHash), []byte(storedHash)) == 1, nil
+}
+
+func HashToken(token string) string {
+	hash := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(hash[:])
 }

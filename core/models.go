@@ -35,7 +35,7 @@ type Account struct {
 type Session struct {
 	ID        string    `json:"id"`
 	UserID    string    `json:"userId"`
-	Token     string    `json:"-"` // Never expose in JSON (security!)
+	TokenHash string    `json:"-"` // Never expose in JSON (security!)
 	IPAddress string    `json:"ipAddress"`
 	UserAgent string    `json:"userAgent"`
 	ExpiresAt time.Time `json:"expiresAt"`
