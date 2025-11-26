@@ -7,26 +7,6 @@ import (
 	"github.com/lborres/kuta/crypto"
 )
 
-type SessionStorage interface {
-	CreateSession(session *Session) error
-
-	// Query methods
-	GetSessionByHash(tokenHash string) (*Session, error)
-	GetSessionByID(id string) (*Session, error)
-	GetUserSessions(userID string) ([]*Session, error)
-
-	// Update
-	UpdateSession(session *Session) error
-
-	// Delete methods
-	DeleteSessionByID(id string) error
-	DeleteSessionByHash(tokenHash string) error
-	DeleteUserSessions(userID string) error
-
-	// Cleanup
-	DeleteExpiredSessions() (int, error)
-}
-
 type SessionConfig struct {
 	MaxAge time.Duration
 }
@@ -34,7 +14,7 @@ type SessionConfig struct {
 type SessionManager struct {
 	config  SessionConfig
 	storage SessionStorage
-	cache   SessionCache
+	cache   Cache
 }
 
 type CreateSessionResult struct {
@@ -48,7 +28,7 @@ func DefaultSessionConfig() SessionConfig {
 	}
 }
 
-func NewSessionManager(config SessionConfig, storage SessionStorage, cache SessionCache) *SessionManager {
+func NewSessionManager(config SessionConfig, storage SessionStorage, cache Cache) *SessionManager {
 	return &SessionManager{
 		config:  config,
 		storage: storage,

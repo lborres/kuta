@@ -6,7 +6,7 @@ import (
 )
 
 func TestInMemoryCacheGetSet(t *testing.T) {
-	cache := NewInMemoryCache(SessionCacheConfig{
+	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
@@ -42,7 +42,7 @@ func TestInMemoryCacheGetSet(t *testing.T) {
 }
 
 func TestInMemoryCacheGetNonExistent(t *testing.T) {
-	cache := NewInMemoryCache(SessionCacheConfig{
+	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
@@ -54,7 +54,7 @@ func TestInMemoryCacheGetNonExistent(t *testing.T) {
 }
 
 func TestInMemoryCacheExpiry(t *testing.T) {
-	cache := NewInMemoryCache(SessionCacheConfig{
+	cache := NewInMemoryCache(CacheConfig{
 		TTL:     100 * time.Millisecond,
 		MaxSize: 500,
 	})
@@ -90,7 +90,7 @@ func TestInMemoryCacheExpiry(t *testing.T) {
 }
 
 func TestInMemoryCacheDelete(t *testing.T) {
-	cache := NewInMemoryCache(SessionCacheConfig{
+	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
@@ -124,7 +124,7 @@ func TestInMemoryCacheDelete(t *testing.T) {
 }
 
 func TestInMemoryCacheDeleteNonExistent(t *testing.T) {
-	cache := NewInMemoryCache(SessionCacheConfig{
+	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
@@ -137,7 +137,7 @@ func TestInMemoryCacheDeleteNonExistent(t *testing.T) {
 }
 
 func TestInMemoryCacheClear(t *testing.T) {
-	cache := NewInMemoryCache(SessionCacheConfig{
+	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
@@ -183,7 +183,7 @@ func TestInMemoryCacheClear(t *testing.T) {
 }
 
 func TestInMemoryCacheMaxSize(t *testing.T) {
-	cache := NewInMemoryCache(SessionCacheConfig{
+	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 2,
 	}) // Max 2 entries
@@ -225,7 +225,7 @@ func TestInMemoryCacheMaxSize(t *testing.T) {
 }
 
 func TestInMemoryCacheSize(t *testing.T) {
-	cache := NewInMemoryCache(SessionCacheConfig{
+	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
@@ -256,7 +256,7 @@ func TestInMemoryCacheSize(t *testing.T) {
 }
 
 func TestInMemoryCacheConcurrentReadWrite(t *testing.T) {
-	cache := NewInMemoryCache(SessionCacheConfig{
+	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
@@ -294,7 +294,7 @@ func TestInMemoryCacheConcurrentReadWrite(t *testing.T) {
 }
 
 func TestInMemoryCacheConcurrentDelete(t *testing.T) {
-	cache := NewInMemoryCache(SessionCacheConfig{
+	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})

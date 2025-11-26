@@ -486,7 +486,7 @@ func TestSessionManagerConcurrentVerify(t *testing.T) {
 
 func TestSessionManagerWithCacheHit(t *testing.T) {
 	storage := NewMockSessionStorage()
-	cache := NewInMemoryCache(SessionCacheConfig{
+	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
@@ -522,7 +522,7 @@ func TestSessionManagerWithCacheHit(t *testing.T) {
 
 func TestSessionManagerWithCacheMiss(t *testing.T) {
 	storage := NewMockSessionStorage()
-	cache := NewInMemoryCache(SessionCacheConfig{
+	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
@@ -545,7 +545,7 @@ func TestSessionManagerWithCacheMiss(t *testing.T) {
 
 func TestSessionManagerWithCacheDestroyInvalidatesCache(t *testing.T) {
 	storage := NewMockSessionStorage()
-	cache := NewInMemoryCache(SessionCacheConfig{
+	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
@@ -580,7 +580,7 @@ func TestSessionManagerWithCacheDestroyInvalidatesCache(t *testing.T) {
 
 func TestSessionManagerWithCacheDestroyByIDInvalidatesCache(t *testing.T) {
 	storage := NewMockSessionStorage()
-	cache := NewInMemoryCache(SessionCacheConfig{
+	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
@@ -604,7 +604,7 @@ func TestSessionManagerWithCacheDestroyByIDInvalidatesCache(t *testing.T) {
 
 func TestSessionManagerWithCacheDestroyAllUserSessionsClearsCache(t *testing.T) {
 	storage := NewMockSessionStorage()
-	cache := NewInMemoryCache(SessionCacheConfig{
+	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
@@ -638,7 +638,7 @@ func TestSessionManagerWithCacheDestroyAllUserSessionsClearsCache(t *testing.T) 
 
 func TestSessionManagerWithCacheExpiredInCache(t *testing.T) {
 	storage := NewMockSessionStorage()
-	cache := NewInMemoryCache(SessionCacheConfig{
+	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})

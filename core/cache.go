@@ -5,14 +5,14 @@ import (
 	"time"
 )
 
-type SessionCache interface {
+type Cache interface {
 	Get(tokenHash string) (*Session, error)
 	Set(tokenHash string, session *Session) error
 	Delete(tokenHash string) error
 	Clear() error
 }
 
-type SessionCacheConfig struct {
+type CacheConfig struct {
 	TTL     time.Duration
 	MaxSize int
 }
@@ -29,7 +29,7 @@ type cachedEntry struct {
 	cachedAt time.Time
 }
 
-func NewInMemoryCache(c SessionCacheConfig) *InMemoryCache {
+func NewInMemoryCache(c CacheConfig) *InMemoryCache {
 	if c.TTL == 0 {
 		c.TTL = 5 * time.Minute
 	}
