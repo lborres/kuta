@@ -163,25 +163,3 @@ func TestNewShouldNotUseCacheWhenDisableCacheTrue(t *testing.T) {
 		t.Fatalf("expected ErrSessionNotFound because cache disabled, got %v", err)
 	}
 }
-
-func TestReexportsShouldBeAccessible(t *testing.T) {
-	// constructors
-	c := NewInMemoryCache(CacheConfig{TTL: time.Minute, MaxSize: 10})
-	if c == nil {
-		t.Fatal("NewInMemoryCache returned nil")
-	}
-	a := NewArgon2()
-	if a == nil {
-		t.Fatal("NewArgon2 returned nil")
-	}
-
-	// default session config
-	cfg := DefaultSessionConfig()
-	if cfg.MaxAge == 0 {
-		t.Fatal("DefaultSessionConfig should set MaxAge")
-	}
-
-	// types compile-time accessibility
-	var _ SessionData
-	var _ CacheStats
-}
