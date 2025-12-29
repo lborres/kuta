@@ -28,13 +28,22 @@ type (
 )
 
 type (
-	User    = core.User
-	Account = core.Account
-	Session = core.Session
+	User        = core.User
+	Account     = core.Account
+	Session     = core.Session
+	SessionData = core.SessionData
+	CacheStats  = core.CacheStats
 )
 
 const (
 	defaultBasePath = "/api/auth"
+)
+
+// Constructors & helpers (convenience re-exports)
+var (
+	NewInMemoryCache     = core.NewInMemoryCache
+	NewArgon2            = crypto.NewArgon2
+	DefaultSessionConfig = core.DefaultSessionConfig
 )
 
 var (
@@ -84,9 +93,8 @@ func New(config Config) (*Kuta, error) {
 
 	// Set Defaults
 
-	// TODO: user should be able to opt out of cache
 	cacheAdapter := config.CacheAdapter
-	if cacheAdapter == nil {
+	if cacheAdapter == nil && !config.DisableCache {
 		cacheAdapter = core.NewInMemoryCache(CacheConfig{
 			TTL:     5 * time.Minute,
 			MaxSize: 500,

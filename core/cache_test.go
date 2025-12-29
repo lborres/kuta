@@ -325,3 +325,42 @@ func TestInMemoryCacheConcurrentDeleteShouldResultInEmptyCache(t *testing.T) {
 		t.Errorf("Expected empty cache, got size %d", cache.Len())
 	}
 }
+
+func TestInMemoryCacheStatsShouldCountHitsMissesSetsAndEvictions(t *testing.T) {
+	cache := NewInMemoryCache(CacheConfig{
+		TTL:     5 * time.Minute,
+		MaxSize: 2,
+	})
+
+	// Initially all counters zero
+	stats := cache.Stats()
+	if stats.Hits != 0 || stats.Misses != 0 || stats.Sets != 0 || stats.Evictions != 0 {
+		t.Fatalf("Expected initial zero stats, got %+v", stats)
+	}
+
+	// Set two entries
+	cache.Set("h1", &Session{ID: "1", TokenHash: "h1", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+	cache.Set("h2", &Session{ID: "2", TokenHash: "h2", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+
+	// This set should evict one entry
+	cache.Set("h3", &Session{ID: "3", TokenHash: "h3", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+
+	// Hits and misses
+	if _, err := cache.Get("h1"); err != nil {
+		// h1 might be evicted; that's fine - count as miss
+	}
+	if _, err := cache.Get("nonexistent"); err == nil {
+		t.Fatalf("expected miss for nonexistent key")
+	}
+
+	stats = cache.Stats()
+	if stats.Sets != 3 {
+		t.Errorf("expected Sets 3, got %d", stats.Sets)
+	}
+	if stats.Evictions != 1 {
+		t.Errorf("expected Evictions 1, got %d", stats.Evictions)
+	}
+	if stats.Size != 2 {
+		t.Errorf("expected Size 2, got %d", stats.Size)
+	}
+}

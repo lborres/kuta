@@ -12,10 +12,12 @@ type Config struct {
 	HTTP HTTPAdapter
 
 	// Optional config
-	CacheAdapter   Cache
 	SessionConfig  *SessionConfig
 	PasswordHasher crypto.PasswordHandler
 	BasePath       string
+
+	CacheAdapter Cache
+	DisableCache bool
 }
 
 type Kuta struct {
