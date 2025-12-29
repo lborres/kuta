@@ -14,7 +14,7 @@ func isBase64URLChar(char rune) bool {
 		char == '-' || char == '_'
 }
 
-func TestTokenGenerate(t *testing.T) {
+func TestTokenGenerateShouldCreateURLSafeToken(t *testing.T) {
 	t.Run("generates valid token", func(t *testing.T) {
 		token, err := generateToken(32)
 		if err != nil {
@@ -103,7 +103,7 @@ func TestTokenGenerate(t *testing.T) {
 	})
 }
 
-func TestTokenGenerateUniqueness(t *testing.T) {
+func TestTokenGenerateShouldProduceUniqueTokens(t *testing.T) {
 	t.Run("generates unique tokens", func(t *testing.T) {
 		tokens := make(map[string]bool)
 		iterations := 1000
@@ -126,7 +126,7 @@ func TestTokenGenerateUniqueness(t *testing.T) {
 	})
 }
 
-func TestTokenGenerateHashed(t *testing.T) {
+func TestTokenGenerateHashedShouldReturnValidTokenHashPair(t *testing.T) {
 	t.Run("generates valid token pair", func(t *testing.T) {
 		pair, err := GenerateHashedToken(32)
 		if err != nil {
@@ -224,7 +224,7 @@ func TestTokenGenerateHashed(t *testing.T) {
 	})
 }
 
-func TestTokenVerify(t *testing.T) {
+func TestTokenVerifyShouldValidateAndRejectInvalid(t *testing.T) {
 	t.Run("verifies correct token", func(t *testing.T) {
 		pair, err := GenerateHashedToken(32)
 		if err != nil {
@@ -315,7 +315,7 @@ func TestTokenVerify(t *testing.T) {
 	})
 }
 
-func TestTokenVerifyCrossInstance(t *testing.T) {
+func TestTokenVerifyShouldFailWhenHashDoesNotMatch(t *testing.T) {
 	t.Run("verifies token from different generation", func(t *testing.T) {
 		// Generate first pair
 		pair1, err := GenerateHashedToken(32)
@@ -352,7 +352,7 @@ func TestTokenVerifyCrossInstance(t *testing.T) {
 	})
 }
 
-func TestTokenHashConsistency(t *testing.T) {
+func TestTokenVerifyShouldBeConsistentForSameToken(t *testing.T) {
 	t.Run("same token always produces same hash", func(t *testing.T) {
 		pair, err := GenerateHashedToken(32)
 		if err != nil {
@@ -372,7 +372,7 @@ func TestTokenHashConsistency(t *testing.T) {
 	})
 }
 
-func TestTokenEntropyDistribution(t *testing.T) {
+func TestTokenGenerateShouldHaveGoodCharacterDistribution(t *testing.T) {
 	t.Run("tokens have good character distribution", func(t *testing.T) {
 		charCounts := make(map[rune]int)
 		iterations := 1000
@@ -395,7 +395,7 @@ func TestTokenEntropyDistribution(t *testing.T) {
 	})
 }
 
-func TestTokenConcurrency(t *testing.T) {
+func TestTokenGenerateHashedShouldBeConcurrencySafe(t *testing.T) {
 	t.Run("safe for concurrent generation", func(t *testing.T) {
 		const goroutines = 100
 		results := make(chan *TokenPair, goroutines)

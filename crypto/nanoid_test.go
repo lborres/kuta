@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestNanoIDConstructor(t *testing.T) {
+func TestNanoIDNewCustomShouldValidateAlphabet(t *testing.T) {
 	tests := []struct {
 		name          string
 		alphabet      string
@@ -68,22 +68,22 @@ func TestNanoIDConstructor(t *testing.T) {
 			}
 
 			// Check alphabet is set correctly (only for valid cases)
-			if test.checkAlphabet && nanoid != nil && nanoid.alphabet != test.alphabet {
-				t.Errorf("alphabet = %q, want %q", nanoid.alphabet, test.alphabet)
+			if test.checkAlphabet && nanoid != nil && string(nanoid.alphabet) != test.alphabet {
+				t.Errorf("alphabet = %q, want %q", string(nanoid.alphabet), test.alphabet)
 			}
 		})
 	}
 }
 
-func TestNanoIDDefault(t *testing.T) {
+func TestNanoIDNewShouldUseDefaultAlphabet(t *testing.T) {
 	nanoid := NewNanoID()
 
 	if nanoid == nil {
 		t.Fatal("NewNanoIDGen() returned nil")
 	}
 
-	if nanoid.alphabet != defaultAlphabet {
-		t.Errorf("alphabet = %q, expected %q", nanoid.alphabet, defaultAlphabet)
+	if string(nanoid.alphabet) != defaultAlphabet {
+		t.Errorf("alphabet = %q, expected %q", string(nanoid.alphabet), defaultAlphabet)
 	}
 
 	if nanoid.mask == 0 {
@@ -91,7 +91,7 @@ func TestNanoIDDefault(t *testing.T) {
 	}
 }
 
-func TestNanoIDGeneratorNewLength(t *testing.T) {
+func TestNanoIDGenerateShouldRespectLengthParameter(t *testing.T) {
 	nanoid := NewNanoID()
 
 	tests := []struct {
@@ -131,7 +131,7 @@ func TestNanoIDGeneratorNewLength(t *testing.T) {
 	}
 }
 
-func TestNanoIDGeneratorUsesAlphabet(t *testing.T) {
+func TestNanoIDGenerateShouldUseOnlyAlphabetCharacters(t *testing.T) {
 	tests := []struct {
 		name     string
 		alphabet string
@@ -200,7 +200,7 @@ func TestNanoIDGeneratorUsesAlphabet(t *testing.T) {
 	}
 }
 
-func TestNanoIDGeneratorUniqueness(t *testing.T) {
+func TestNanoIDGenerateShouldProduceUniqueIDs(t *testing.T) {
 	nanoid := NewNanoID()
 	seen := make(map[string]bool)
 	iterations := 10000
@@ -222,7 +222,7 @@ func TestNanoIDGeneratorUniqueness(t *testing.T) {
 	}
 }
 
-func TestNanoIDDistribution(t *testing.T) {
+func TestNanoIDGenerateShouldDistributeCharactersEvenly(t *testing.T) {
 	t.Run("characters appear with equal probability", func(t *testing.T) {
 		alphabet := "ABCD"
 		nanoid, _ := NewCustomNanoID(alphabet)
@@ -245,7 +245,7 @@ func TestNanoIDDistribution(t *testing.T) {
 		// Each character should appear roughly 25% of the time
 		totalChars := iterations * idLength
 		expectedPerChar := totalChars / len(alphabet)
-		tolerance := 0.1 // 10% tolerance
+		tolerance := 0.01
 
 		for _, char := range alphabet {
 			count := counts[char]
@@ -259,7 +259,7 @@ func TestNanoIDDistribution(t *testing.T) {
 	})
 }
 
-func TestNanoIDGetMask(t *testing.T) {
+func TestNanoIDGetMaskShouldReturnCorrectBitmask(t *testing.T) {
 	tests := []struct {
 		alphabetLen  int
 		expectedMask int
@@ -298,7 +298,7 @@ func TestNanoIDGetMask(t *testing.T) {
 	}
 }
 
-func TestNanoIDGetMaskProperties(t *testing.T) {
+func TestNanoIDGetMaskShouldHaveCorrectProperties(t *testing.T) {
 	t.Run("mask is always (power of 2) - 1", func(t *testing.T) {
 		for alphabetLen := 2; alphabetLen <= 255; alphabetLen++ {
 			mask := getMask(alphabetLen)
@@ -326,7 +326,7 @@ func TestNanoIDGetMaskProperties(t *testing.T) {
 	})
 }
 
-func TestNanoIDEdgeCases(t *testing.T) {
+func TestNanoIDGenerateShouldHandleEdgeCases(t *testing.T) {
 	tests := []struct {
 		name     string
 		alphabet string
@@ -374,7 +374,7 @@ func TestNanoIDEdgeCases(t *testing.T) {
 	}
 }
 
-func TestNanoIDLengthVariations(t *testing.T) {
+func TestNanoIDGenerateShouldHandleLengthVariations(t *testing.T) {
 	nanoid := NewNanoID()
 
 	tests := []struct {
@@ -404,7 +404,7 @@ func TestNanoIDLengthVariations(t *testing.T) {
 	}
 }
 
-func TestNanoIDMultipleCallsSameGenerator(t *testing.T) {
+func TestNanoIDGenerateShouldProduceUniqueIDsFromSameGenerator(t *testing.T) {
 	nanoid := NewNanoID()
 	ids := make(map[string]bool)
 
@@ -426,7 +426,7 @@ func TestNanoIDMultipleCallsSameGenerator(t *testing.T) {
 	}
 }
 
-func TestNanoIDConcurrency(t *testing.T) {
+func TestNanoIDGenerateShouldBeConcurrencySafe(t *testing.T) {
 	t.Run("safe for concurrent use", func(t *testing.T) {
 		nanoid := NewNanoID()
 		const goroutines = 100
@@ -466,7 +466,7 @@ func TestNanoIDConcurrency(t *testing.T) {
 	})
 }
 
-func TestNanoIDAlphabetBoundaryConditions(t *testing.T) {
+func TestNanoIDGenerateShouldHandleAlphabetBoundaries(t *testing.T) {
 	tests := []struct {
 		name        string
 		alphabetLen int

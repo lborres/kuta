@@ -21,7 +21,7 @@ func setupPasswordHash(t *testing.T, password string) (*Argon2, string) {
 	return a, hash
 }
 
-func TestArgon2Hash(t *testing.T) {
+func TestArgon2HashShouldGenerateValidHash(t *testing.T) {
 	t.Run("format validation", func(t *testing.T) {
 		_, hash := setupPasswordHash(t, "testPassword123")
 
@@ -92,7 +92,7 @@ func TestArgon2Hash(t *testing.T) {
 	})
 }
 
-func TestArgon2HashSecurityProperties(t *testing.T) {
+func TestArgon2HashShouldHaveSecurityProperties(t *testing.T) {
 	t.Run("uses constant time comparison in Verify", func(t *testing.T) {
 		// This is implicit in the implementation, but we can verify behavior
 		a := setupArgon2(t)
@@ -125,7 +125,7 @@ func TestArgon2HashSecurityProperties(t *testing.T) {
 	})
 }
 
-func TestArgon2VerifyCrossInstanceCompatibility(t *testing.T) {
+func TestArgon2VerifyShouldWorkAcrossInstances(t *testing.T) {
 	t.Run("verifies hash created by different instance", func(t *testing.T) {
 		// Arrange
 		a1 := NewArgon2()
@@ -171,7 +171,7 @@ func TestArgon2VerifyCrossInstanceCompatibility(t *testing.T) {
 	})
 }
 
-func TestArgon2HashCustomParameters(t *testing.T) {
+func TestArgon2HashShouldRespectCustomParameters(t *testing.T) {
 	t.Run("respects custom memory setting", func(t *testing.T) {
 		expected := uint32(32 * 1024)
 		a := &Argon2{
@@ -275,7 +275,7 @@ func TestArgon2HashCustomParameters(t *testing.T) {
 	})
 }
 
-func TestArgon2Verify(t *testing.T) {
+func TestArgon2VerifyShouldValidatePasswords(t *testing.T) {
 	t.Run("password validation", func(t *testing.T) {
 		password := "correctPassword"
 		a, hash := setupPasswordHash(t, password)
@@ -329,7 +329,7 @@ func TestArgon2Verify(t *testing.T) {
 	})
 }
 
-func TestArgon2VerifyEdgeCases(t *testing.T) {
+func TestArgon2VerifyShouldHandleEdgeCases(t *testing.T) {
 	t.Run("handles very long passwords", func(t *testing.T) {
 		// Arrange
 		a := setupArgon2(t)
@@ -386,7 +386,7 @@ func TestArgon2VerifyEdgeCases(t *testing.T) {
 	})
 }
 
-func TestArgon2DecodeHash(t *testing.T) {
+func TestArgon2DecodeHashShouldExtractParameters(t *testing.T) {
 	_, hash := setupPasswordHash(t, "test")
 	params, salt, hashBytes, err := decodeArgon2Hash(hash)
 	if err != nil {
@@ -440,7 +440,7 @@ func TestArgon2DecodeHash(t *testing.T) {
 	}
 }
 
-func TestArgon2DecodeHashErrorCases(t *testing.T) {
+func TestArgon2DecodeHashShouldHandleErrors(t *testing.T) {
 	tests := []struct {
 		name          string
 		hash          string
@@ -496,7 +496,7 @@ func TestArgon2DecodeHashErrorCases(t *testing.T) {
 	}
 }
 
-func TestArgon2New(t *testing.T) {
+func TestArgon2NewShouldUseDefaultParameters(t *testing.T) {
 	a := setupArgon2(t)
 
 	tests := []struct {
@@ -520,7 +520,7 @@ func TestArgon2New(t *testing.T) {
 	}
 }
 
-func TestArgon2ConcurrentUsage(t *testing.T) {
+func TestArgon2HashShouldBeConcurrencySafe(t *testing.T) {
 	t.Run("handles concurrent hashing", func(t *testing.T) {
 		a := setupArgon2(t)
 		const goroutines = 10
