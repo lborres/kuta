@@ -5,7 +5,7 @@
 
 BEGIN;
 
-SELECT pg_advisory_xact_lock(25123003);
+SELECT pg_advisory_xact_lock(25123002);
 
 DO $$
 BEGIN
@@ -57,14 +57,5 @@ CREATE TABLE IF NOT EXISTS public.sessions (
 CREATE INDEX IF NOT EXISTS idx_accounts_user_id ON public.accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON public.sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email);
-
-DO $$
-BEGIN
-  INSERT INTO public.__migrations (migration_name, applied_at)
-  VALUES ('25123003_create_auth_tables.up.sql', now())
-  ON CONFLICT (migration_name) DO UPDATE SET applied_at = EXCLUDED.applied_at;
-EXCEPTION WHEN OTHERS THEN
-  RAISE NOTICE 'Failed to record migration in public.__migrations: %', SQLERRM;
-END$$;
 
 COMMIT;

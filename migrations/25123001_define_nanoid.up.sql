@@ -3,7 +3,7 @@
 -- prefer the api server's nanoid generation
 
 BEGIN;
-SELECT pg_advisory_xact_lock(25123002);
+SELECT pg_advisory_xact_lock(25123001);
 
 -- ensure crypto is available
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -53,20 +53,6 @@ BEGIN
   END LOOP;
 
   RETURN result;
-END;
-$$;
-
--- Record this migration in the tracker if the tracker table exists (best-effort)
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.tables
-    WHERE table_schema = 'public' AND table_name = '__migrations'
-  ) THEN
-    INSERT INTO public.__migrations (migration_name, applied_at)
-    VALUES ('25123002_define_nanoid.up.sql', now())
-    ON CONFLICT (migration_name) DO NOTHING;
-  END IF;
 END;
 $$;
 
