@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// TODO: Make this agnostic to whatever needs caching
 type Cache interface {
 	Get(tokenHash string) (*Session, error)
 	Set(tokenHash string, session *Session) error
@@ -18,13 +19,13 @@ type CacheConfig struct {
 }
 
 type InMemoryCache struct {
-	cache   map[string]*cachedEntry // key: token hash
+	cache   map[string]*cachedRecord // key: token hash
 	mu      sync.RWMutex
 	ttl     time.Duration
 	maxSize int
 }
 
-type cachedEntry struct {
+type cachedRecord struct {
 	session  *Session
 	cachedAt time.Time
 }
@@ -38,7 +39,7 @@ func NewInMemoryCache(c CacheConfig) *InMemoryCache {
 	}
 
 	return &InMemoryCache{
-		cache:   make(map[string]*cachedEntry),
+		cache:   make(map[string]*cachedRecord),
 		ttl:     c.TTL,
 		maxSize: c.MaxSize,
 	}
@@ -48,12 +49,12 @@ func (c *InMemoryCache) Get(tokenHash string) (*Session, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	entry, exists := c.cache[tokenHash]
+	record, exists := c.cache[tokenHash]
 	if !exists {
 		return nil, ErrCacheNotFound
 	}
 
-	if time.Since(entry.cachedAt) > c.ttl {
+	if time.Since(record.cachedAt) > c.ttl {
 		c.mu.RUnlock()
 
 		if err := c.Delete(tokenHash); err != nil {
@@ -64,7 +65,7 @@ func (c *InMemoryCache) Get(tokenHash string) (*Session, error) {
 		return nil, ErrCacheNotFound
 	}
 
-	return entry.session, nil
+	return record.session, nil
 }
 
 func (c *InMemoryCache) Set(tokenHash string, session *Session) error {
@@ -79,7 +80,7 @@ func (c *InMemoryCache) Set(tokenHash string, session *Session) error {
 		}
 	}
 
-	c.cache[tokenHash] = &cachedEntry{
+	c.cache[tokenHash] = &cachedRecord{
 		session:  session,
 		cachedAt: time.Now(),
 	}
@@ -97,11 +98,11 @@ func (c *InMemoryCache) Delete(tokenHash string) error {
 func (c *InMemoryCache) Clear() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.cache = make(map[string]*cachedEntry)
+	c.cache = make(map[string]*cachedRecord)
 	return nil
 }
 
-func (c *InMemoryCache) Size() int {
+func (c *InMemoryCache) Len() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return len(c.cache)

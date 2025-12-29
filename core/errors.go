@@ -2,34 +2,41 @@ package core
 
 import "errors"
 
-// Authentication errors
+// Authentication Related Errors
 var (
 	// User errors
+	ErrUserExists         = errors.New("user already exists")       // 409 Conflict
+	ErrUserNotFound       = errors.New("user not found")            // 404 Not Found
+	ErrInvalidCredentials = errors.New("invalid email or password") // 401 Unauthorized
+)
 
-	ErrUserExists         = errors.New("user already exists")
-	ErrUserNotFound       = errors.New("user not found")
-	ErrInvalidCredentials = errors.New("invalid email or password")
+// Session errors
+var (
+	ErrMissingAuthHeader = errors.New("missing authorization header") // 401
+	ErrInvalidToken      = errors.New("invalid session token")        // 401
+	ErrSessionNotFound   = errors.New("session not found")            // 401
+	ErrSessionExpired    = errors.New("session expired")              // 401
+	ErrCacheNotFound     = errors.New("session not found in cache")
+)
 
-	// Session errors
+// Validation errors (client input)
+var (
+	ErrInvalidAuthHeader = errors.New("invalid authorization format, expected 'Bearer <token>'") // 401
+	ErrEmailRequired     = errors.New("email is required")                                       // 400
+	ErrPasswordRequired  = errors.New("password is required")                                    // 400
+	ErrPasswordTooShort  = errors.New("password is too short")                                   // 400
+	ErrPasswordTooLong   = errors.New("password is too long")                                    // 400
+	ErrInvalidEmail      = errors.New("invalid email format")                                    // 400
+)
 
-	ErrInvalidToken    = errors.New("invalid session token")
-	ErrSessionNotFound = errors.New("session not found")
-	ErrSessionExpired  = errors.New("session expired")
-	ErrUnauthorized    = errors.New("unauthorized")
-	ErrCacheNotFound   = errors.New("session not found in cache")
+// Config errors (server-side configuration)
+var (
+	ErrDBAdapterRequired   = errors.New("database adapter is required")          // 500
+	ErrHTTPAdapterRequired = errors.New("adapter is required")                   // 500
+	ErrSecretRequired      = errors.New("secret is required")                    // 500
+	ErrSecretTooShort      = errors.New("secret must be at least 32 characters") // 500
+)
 
-	// Validation errors
-
-	ErrEmailRequired    = errors.New("email is required")
-	ErrPasswordRequired = errors.New("password is required")
-	ErrPasswordTooShort = errors.New("password is too short")
-	ErrPasswordTooLong  = errors.New("password is too long")
-	ErrInvalidEmail     = errors.New("invalid email format")
-
-	// Config errors
-
-	ErrDBAdapterRequired   = errors.New("database adapter is required")
-	ErrHTTPAdapterRequired = errors.New("http adapter is required")
-	ErrSecretRequired      = errors.New("secret is required")
-	ErrSecretTooShort      = errors.New("secret must be at least 32 characters")
+var (
+	ErrNotImplemented = errors.New("not implemented") // 501
 )

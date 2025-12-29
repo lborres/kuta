@@ -133,7 +133,7 @@ func (m *MockSessionStorage) DeleteExpiredSessions() (int, error) {
 	return count, nil
 }
 
-func TestSessionManagerCreate(t *testing.T) {
+func TestSessionManagerCreateShouldGenerateValidSessionAndToken(t *testing.T) {
 	storage := NewMockSessionStorage()
 	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
 
@@ -186,7 +186,7 @@ func TestSessionManagerCreate(t *testing.T) {
 	}
 }
 
-func TestSessionManagerCreateMultipleUsers(t *testing.T) {
+func TestSessionManagerCreateMultipleUsersShouldProduceDistinctSessionsAndTokens(t *testing.T) {
 	storage := NewMockSessionStorage()
 	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
 
@@ -212,7 +212,7 @@ func TestSessionManagerCreateMultipleUsers(t *testing.T) {
 	}
 }
 
-func TestSessionManagerVerifyValidSession(t *testing.T) {
+func TestSessionManagerVerifyValidSessionShouldReturnSession(t *testing.T) {
 	storage := NewMockSessionStorage()
 	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
 
@@ -234,7 +234,7 @@ func TestSessionManagerVerifyValidSession(t *testing.T) {
 	}
 }
 
-func TestSessionManagerVerifyEmptyToken(t *testing.T) {
+func TestSessionManagerVerifyEmptyTokenShouldReturnErrInvalidToken(t *testing.T) {
 	storage := NewMockSessionStorage()
 	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
 
@@ -244,7 +244,7 @@ func TestSessionManagerVerifyEmptyToken(t *testing.T) {
 	}
 }
 
-func TestSessionManagerVerify_nvalidToken(t *testing.T) {
+func TestSessionManagerVerifyInvalidTokenShouldReturnErrSessionNotFound(t *testing.T) {
 	storage := NewMockSessionStorage()
 	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
 
@@ -254,7 +254,7 @@ func TestSessionManagerVerify_nvalidToken(t *testing.T) {
 	}
 }
 
-func TestSessionManagerVerifyExpiredSession(t *testing.T) {
+func TestSessionManagerVerifyExpiredSessionShouldReturnErrSessionExpiredAndDeleteItFromStorage(t *testing.T) {
 	storage := NewMockSessionStorage()
 	config := SessionConfig{MaxAge: 100 * time.Millisecond}
 	manager := NewSessionManager(config, storage, nil)
@@ -278,7 +278,7 @@ func TestSessionManagerVerifyExpiredSession(t *testing.T) {
 	}
 }
 
-func TestSessionManagerVerifyStorageError(t *testing.T) {
+func TestSessionManagerVerifyStorageErrorShouldReturnErrSessionNotFound(t *testing.T) {
 	storage := NewMockSessionStorage()
 	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
 
@@ -294,7 +294,7 @@ func TestSessionManagerVerifyStorageError(t *testing.T) {
 	}
 }
 
-func TestSessionManagerDestroyBySessionID(t *testing.T) {
+func TestSessionManagerDestroyBySessionIDShouldRemoveSession(t *testing.T) {
 	storage := NewMockSessionStorage()
 	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
 
@@ -321,7 +321,7 @@ func TestSessionManagerDestroyBySessionID(t *testing.T) {
 	}
 }
 
-func TestSessionManagerDestroyBySessionIDNonExistent(t *testing.T) {
+func TestSessionManagerDestroyBySessionIDNonExistentShouldNotPanic(t *testing.T) {
 	storage := NewMockSessionStorage()
 	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
 
@@ -331,7 +331,7 @@ func TestSessionManagerDestroyBySessionIDNonExistent(t *testing.T) {
 	_ = err
 }
 
-func TestSessionManagerDestroyAllUserSessions(t *testing.T) {
+func TestSessionManagerDestroyAllUserSessionsShouldRemoveOnlyUserSessions(t *testing.T) {
 	storage := NewMockSessionStorage()
 	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
 
@@ -387,7 +387,7 @@ func TestSessionManagerDestroyAllUserSessions(t *testing.T) {
 	}
 }
 
-func TestSessionManagerDestroyAllUserSessionsNoSessions(t *testing.T) {
+func TestSessionManagerDestroyAllUserSessionsNoSessionsShouldNotError(t *testing.T) {
 	storage := NewMockSessionStorage()
 	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
 
@@ -398,7 +398,7 @@ func TestSessionManagerDestroyAllUserSessionsNoSessions(t *testing.T) {
 	}
 }
 
-func TestSessionManagerDefaultSessionConfig(t *testing.T) {
+func TestSessionManagerDefaultSessionConfigShouldSet24Hours(t *testing.T) {
 	config := DefaultSessionConfig()
 
 	if config.MaxAge != 24*time.Hour {
@@ -406,7 +406,7 @@ func TestSessionManagerDefaultSessionConfig(t *testing.T) {
 	}
 }
 
-func TestSessionManagerCustomConfig(t *testing.T) {
+func TestSessionManagerCustomConfigShouldRespectMaxAge(t *testing.T) {
 	storage := NewMockSessionStorage()
 	config := SessionConfig{MaxAge: 1 * time.Hour}
 	manager := NewSessionManager(config, storage, nil)
@@ -421,7 +421,7 @@ func TestSessionManagerCustomConfig(t *testing.T) {
 	}
 }
 
-func TestSessionManagerConcurrentCreate(t *testing.T) {
+func TestSessionManagerConcurrentCreateShouldCreateMultipleSessions(t *testing.T) {
 	storage := NewMockSessionStorage()
 	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
 
@@ -450,7 +450,7 @@ func TestSessionManagerConcurrentCreate(t *testing.T) {
 	}
 }
 
-func TestSessionManagerConcurrentVerify(t *testing.T) {
+func TestSessionManagerConcurrentVerifyShouldHandleConcurrentVerifies(t *testing.T) {
 	storage := NewMockSessionStorage()
 	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
 
@@ -484,7 +484,7 @@ func TestSessionManagerConcurrentVerify(t *testing.T) {
 	}
 }
 
-func TestSessionManagerWithCacheHit(t *testing.T) {
+func TestSessionManagerWithCacheHitShouldReturnFromCacheOnSecondVerify(t *testing.T) {
 	storage := NewMockSessionStorage()
 	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
@@ -515,12 +515,12 @@ func TestSessionManagerWithCacheHit(t *testing.T) {
 	}
 
 	// Verify cache was actually used
-	if cache.Size() != 1 {
-		t.Errorf("Expected 1 session in cache, got %d", cache.Size())
+	if cache.Len() != 1 {
+		t.Errorf("Expected 1 session in cache, got %d", cache.Len())
 	}
 }
 
-func TestSessionManagerWithCacheMiss(t *testing.T) {
+func TestSessionManagerWithCacheMissShouldCacheSessionAfterVerify(t *testing.T) {
 	storage := NewMockSessionStorage()
 	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
@@ -538,12 +538,12 @@ func TestSessionManagerWithCacheMiss(t *testing.T) {
 	}
 
 	// Verify session is cached
-	if cache.Size() != 1 {
+	if cache.Len() != 1 {
 		t.Error("Session should be cached after first verify")
 	}
 }
 
-func TestSessionManagerWithCacheDestroyInvalidatesCache(t *testing.T) {
+func TestSessionManagerWithCacheDestroyInvalidatesCacheShouldClearCacheAfterDestroy(t *testing.T) {
 	storage := NewMockSessionStorage()
 	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
@@ -556,7 +556,7 @@ func TestSessionManagerWithCacheDestroyInvalidatesCache(t *testing.T) {
 	manager.Verify(result.Token)
 
 	// Verify it's cached
-	if cache.Size() != 1 {
+	if cache.Len() != 1 {
 		t.Error("Session should be cached")
 	}
 
@@ -567,7 +567,7 @@ func TestSessionManagerWithCacheDestroyInvalidatesCache(t *testing.T) {
 	}
 
 	// Cache should be invalidated
-	if cache.Size() != 0 {
+	if cache.Len() != 0 {
 		t.Error("Cache should be empty after Destroy")
 	}
 
@@ -578,7 +578,7 @@ func TestSessionManagerWithCacheDestroyInvalidatesCache(t *testing.T) {
 	}
 }
 
-func TestSessionManagerWithCacheDestroyByIDInvalidatesCache(t *testing.T) {
+func TestSessionManagerWithCacheDestroyByIDInvalidatesCacheShouldClearCache(t *testing.T) {
 	storage := NewMockSessionStorage()
 	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
@@ -597,12 +597,12 @@ func TestSessionManagerWithCacheDestroyByIDInvalidatesCache(t *testing.T) {
 	}
 
 	// Cache should be invalidated
-	if cache.Size() != 0 {
+	if cache.Len() != 0 {
 		t.Error("Cache should be empty after DestroyBySessionID")
 	}
 }
 
-func TestSessionManagerWithCacheDestroyAllUserSessionsClearsCache(t *testing.T) {
+func TestSessionManagerWithCacheDestroyAllUserSessionsClearsCacheShouldClearCache(t *testing.T) {
 	storage := NewMockSessionStorage()
 	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
@@ -620,8 +620,8 @@ func TestSessionManagerWithCacheDestroyAllUserSessionsClearsCache(t *testing.T) 
 	manager.Verify(result3.Token)
 
 	// Should have 3 cached sessions
-	if cache.Size() != 3 {
-		t.Errorf("Expected 3 cached sessions, got %d", cache.Size())
+	if cache.Len() != 3 {
+		t.Errorf("Expected 3 cached sessions, got %d", cache.Len())
 	}
 
 	// Destroy all user123 sessions
@@ -631,12 +631,12 @@ func TestSessionManagerWithCacheDestroyAllUserSessionsClearsCache(t *testing.T) 
 	}
 
 	// Cache should be cleared (simple implementation clears all)
-	if cache.Size() != 0 {
+	if cache.Len() != 0 {
 		t.Error("Cache should be cleared after DestroyAllUserSessions")
 	}
 }
 
-func TestSessionManagerWithCacheExpiredInCache(t *testing.T) {
+func TestSessionManagerWithCacheExpiredInCacheShouldDetectExpiryAndRemoveFromCache(t *testing.T) {
 	storage := NewMockSessionStorage()
 	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
@@ -661,7 +661,7 @@ func TestSessionManagerWithCacheExpiredInCache(t *testing.T) {
 	}
 
 	// Cache should be invalidated
-	if cache.Size() != 0 {
+	if cache.Len() != 0 {
 		t.Error("Expired session should be removed from cache")
 	}
 }

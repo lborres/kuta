@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestInMemoryCacheGetSet(t *testing.T) {
+func TestInMemoryCacheGetSetShouldStoreAndRetrieve(t *testing.T) {
 	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
@@ -41,7 +41,7 @@ func TestInMemoryCacheGetSet(t *testing.T) {
 	}
 }
 
-func TestInMemoryCacheGetNonExistent(t *testing.T) {
+func TestInMemoryCacheGetNonExistentShouldReturnErrCacheNotFound(t *testing.T) {
 	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
@@ -53,7 +53,7 @@ func TestInMemoryCacheGetNonExistent(t *testing.T) {
 	}
 }
 
-func TestInMemoryCacheExpiry(t *testing.T) {
+func TestInMemoryCacheExpiryShouldExpireEntriesAfterTTL(t *testing.T) {
 	cache := NewInMemoryCache(CacheConfig{
 		TTL:     100 * time.Millisecond,
 		MaxSize: 500,
@@ -84,12 +84,12 @@ func TestInMemoryCacheExpiry(t *testing.T) {
 		t.Error("Session should be expired and removed from cache")
 	}
 
-	if cache.Size() != 0 {
-		t.Errorf("Cache should be empty after expired entry removed, got size %d", cache.Size())
+	if cache.Len() != 0 {
+		t.Errorf("Cache should be empty after expired entry removed, got size %d", cache.Len())
 	}
 }
 
-func TestInMemoryCacheDelete(t *testing.T) {
+func TestInMemoryCacheDeleteShouldRemoveEntry(t *testing.T) {
 	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
@@ -123,7 +123,7 @@ func TestInMemoryCacheDelete(t *testing.T) {
 	}
 }
 
-func TestInMemoryCacheDeleteNonExistent(t *testing.T) {
+func TestInMemoryCacheDeleteNonExistentShouldNotError(t *testing.T) {
 	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
@@ -136,7 +136,7 @@ func TestInMemoryCacheDeleteNonExistent(t *testing.T) {
 	}
 }
 
-func TestInMemoryCacheClear(t *testing.T) {
+func TestInMemoryCacheClearShouldRemoveAllEntries(t *testing.T) {
 	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
@@ -151,8 +151,8 @@ func TestInMemoryCacheClear(t *testing.T) {
 	cache.Set("hash3", session3)
 
 	// Verify all exist
-	if cache.Size() != 3 {
-		t.Errorf("Expected 3 sessions in cache, got %d", cache.Size())
+	if cache.Len() != 3 {
+		t.Errorf("Expected 3 sessions in cache, got %d", cache.Len())
 	}
 
 	// Clear all
@@ -162,8 +162,8 @@ func TestInMemoryCacheClear(t *testing.T) {
 	}
 
 	// All should be gone
-	if cache.Size() != 0 {
-		t.Errorf("Cache should be empty after Clear, got size %d", cache.Size())
+	if cache.Len() != 0 {
+		t.Errorf("Cache should be empty after Clear, got size %d", cache.Len())
 	}
 
 	_, err = cache.Get("hash1")
@@ -182,7 +182,7 @@ func TestInMemoryCacheClear(t *testing.T) {
 	}
 }
 
-func TestInMemoryCacheMaxSize(t *testing.T) {
+func TestInMemoryCacheMaxLenShouldEvictWhenOverCapacity(t *testing.T) {
 	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 2,
@@ -195,16 +195,16 @@ func TestInMemoryCacheMaxSize(t *testing.T) {
 	cache.Set("hash1", session1)
 	cache.Set("hash2", session2)
 
-	if cache.Size() != 2 {
-		t.Errorf("Expected 2 sessions, got %d", cache.Size())
+	if cache.Len() != 2 {
+		t.Errorf("Expected 2 sessions, got %d", cache.Len())
 	}
 
 	// Adding 3rd should evict one
 	cache.Set("hash3", session3)
 
 	// Should only have 2 entries
-	if cache.Size() != 2 {
-		t.Errorf("Expected size 2 after eviction, got %d", cache.Size())
+	if cache.Len() != 2 {
+		t.Errorf("Expected size 2 after eviction, got %d", cache.Len())
 	}
 
 	// At least one of the first two should be evicted
@@ -224,38 +224,38 @@ func TestInMemoryCacheMaxSize(t *testing.T) {
 	}
 }
 
-func TestInMemoryCacheSize(t *testing.T) {
+func TestInMemoryCacheLenShouldReflectOperations(t *testing.T) {
 	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
 
-	if cache.Size() != 0 {
+	if cache.Len() != 0 {
 		t.Error("New cache should be empty")
 	}
 
 	cache.Set("hash1", &Session{ID: "1", CreatedAt: time.Now(), UpdatedAt: time.Now()})
-	if cache.Size() != 1 {
-		t.Errorf("Expected size 1, got %d", cache.Size())
+	if cache.Len() != 1 {
+		t.Errorf("Expected size 1, got %d", cache.Len())
 	}
 
 	cache.Set("hash2", &Session{ID: "2", CreatedAt: time.Now(), UpdatedAt: time.Now()})
-	if cache.Size() != 2 {
-		t.Errorf("Expected size 2, got %d", cache.Size())
+	if cache.Len() != 2 {
+		t.Errorf("Expected size 2, got %d", cache.Len())
 	}
 
 	cache.Delete("hash1")
-	if cache.Size() != 1 {
-		t.Errorf("Expected size 1 after delete, got %d", cache.Size())
+	if cache.Len() != 1 {
+		t.Errorf("Expected size 1 after delete, got %d", cache.Len())
 	}
 
 	cache.Clear()
-	if cache.Size() != 0 {
-		t.Errorf("Expected size 0 after clear, got %d", cache.Size())
+	if cache.Len() != 0 {
+		t.Errorf("Expected size 0 after clear, got %d", cache.Len())
 	}
 }
 
-func TestInMemoryCacheConcurrentReadWrite(t *testing.T) {
+func TestInMemoryCacheConcurrentReadWriteShouldNotRaceOrPanic(t *testing.T) {
 	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
@@ -293,7 +293,7 @@ func TestInMemoryCacheConcurrentReadWrite(t *testing.T) {
 	// Should not panic or have race conditions
 }
 
-func TestInMemoryCacheConcurrentDelete(t *testing.T) {
+func TestInMemoryCacheConcurrentDeleteShouldResultInEmptyCache(t *testing.T) {
 	cache := NewInMemoryCache(CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
@@ -321,7 +321,7 @@ func TestInMemoryCacheConcurrentDelete(t *testing.T) {
 	}
 
 	// Cache should be empty
-	if cache.Size() != 0 {
-		t.Errorf("Expected empty cache, got size %d", cache.Size())
+	if cache.Len() != 0 {
+		t.Errorf("Expected empty cache, got size %d", cache.Len())
 	}
 }
