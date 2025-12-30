@@ -1,6 +1,7 @@
 package kuta
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/lborres/kuta/core"
@@ -36,7 +37,8 @@ type (
 )
 
 const (
-	defaultBasePath = "/api/auth"
+	defaultBasePath  = "/api/auth"
+	defaultSecretLen = 32
 )
 
 // Constructors & helpers (convenience re-exports)
@@ -84,6 +86,9 @@ func New(config Config) (*Kuta, error) {
 	if config.Secret == "" {
 		return nil, ErrSecretRequired
 	}
+	if len(config.Secret) < defaultSecretLen {
+		return nil, fmt.Errorf("%w - minimum of %d characters", ErrSecretTooShort, defaultSecretLen)
+	}
 	if config.Database == nil {
 		return nil, ErrDBAdapterRequired
 	}
@@ -95,7 +100,7 @@ func New(config Config) (*Kuta, error) {
 
 	cacheAdapter := config.CacheAdapter
 	if cacheAdapter == nil && !config.DisableCache {
-		cacheAdapter = core.NewInMemoryCache(CacheConfig{
+		cacheAdapter = NewInMemoryCache(CacheConfig{
 			TTL:     5 * time.Minute,
 			MaxSize: 500,
 		})

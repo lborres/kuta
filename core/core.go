@@ -25,4 +25,5 @@ type Kuta struct {
 	PasswordHasher crypto.PasswordHandler
 	Secret         string
 	BasePath       string
+	Database       AuthStorage
 }
