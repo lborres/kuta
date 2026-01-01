@@ -5,25 +5,24 @@ import (
 	"time"
 
 	"github.com/lborres/kuta/core"
+	"github.com/lborres/kuta/pkg/cache"
 	"github.com/lborres/kuta/pkg/crypto"
+	"github.com/lborres/kuta/services"
 )
 
-// interfaces
 type (
-	AuthStorage = core.AuthStorage
+	AuthStorage = core.StorageAdapter
+	AuthHandler = core.AuthHandler
 	Cache       = core.Cache
 
 	HTTPAdapter = core.HTTPAdapter
 
-	SessionManager = core.SessionManager
+	SessionManager = services.SessionManager
 
 	PasswordHandler = crypto.PasswordHandler
 )
 
-// structs
 type (
-	Kuta          = core.Kuta
-	Config        = core.Config
 	SessionConfig = core.SessionConfig
 	CacheConfig   = core.CacheConfig
 )
@@ -36,6 +35,13 @@ type (
 	CacheStats  = core.CacheStats
 )
 
+type (
+	SignUpInput  = core.SignUpInput
+	SignUpResult = core.SignUpResult
+	SignInInput  = core.SignInInput
+	SignInResult = core.SignInResult
+)
+
 const (
 	defaultBasePath  = "/api/auth"
 	defaultSecretLen = 32
@@ -43,9 +49,8 @@ const (
 
 // Constructors & helpers (convenience re-exports)
 var (
-	NewInMemoryCache     = core.NewInMemoryCache
-	NewArgon2            = crypto.NewArgon2
-	DefaultSessionConfig = core.DefaultSessionConfig
+	NewInMemoryCache = cache.NewInMemoryCache
+	NewArgon2        = crypto.NewArgon2
 )
 
 var (
@@ -82,25 +87,49 @@ var (
 	ErrNotImplemented = core.ErrNotImplemented
 )
 
+type Config struct {
+	Secret string
+
+	Database core.StorageAdapter
+
+	HTTP core.HTTPAdapter
+
+	// Optional config
+	SessionConfig  *core.SessionConfig
+	PasswordHasher crypto.PasswordHandler
+	BasePath       string
+
+	CacheAdapter core.Cache
+	DisableCache bool
+}
+
+type Kuta struct {
+	SessionManager *services.SessionManager
+	AuthService    *services.AuthService
+	Database       core.StorageAdapter
+	Secret         string
+	BasePath       string
+}
+
 func New(config Config) (*Kuta, error) {
 	if config.Secret == "" {
-		return nil, ErrSecretRequired
+		return nil, core.ErrSecretRequired
 	}
 	if len(config.Secret) < defaultSecretLen {
-		return nil, fmt.Errorf("%w - minimum of %d characters", ErrSecretTooShort, defaultSecretLen)
+		return nil, fmt.Errorf("%w - minimum of %d characters", core.ErrSecretTooShort, defaultSecretLen)
 	}
 	if config.Database == nil {
-		return nil, ErrDBAdapterRequired
+		return nil, core.ErrDBAdapterRequired
 	}
 	if config.HTTP == nil {
-		return nil, ErrHTTPAdapterRequired
+		return nil, core.ErrHTTPAdapterRequired
 	}
 
 	// Set Defaults
 
 	cacheAdapter := config.CacheAdapter
 	if cacheAdapter == nil && !config.DisableCache {
-		cacheAdapter = NewInMemoryCache(CacheConfig{
+		cacheAdapter = cache.NewInMemoryCache(core.CacheConfig{
 			TTL:     5 * time.Minute,
 			MaxSize: 500,
 		})
@@ -108,7 +137,7 @@ func New(config Config) (*Kuta, error) {
 
 	sessionConfig := config.SessionConfig
 	if sessionConfig == nil {
-		sessionConfig = &SessionConfig{
+		sessionConfig = &core.SessionConfig{
 			MaxAge: 24 * time.Hour,
 		}
 	}
@@ -123,22 +152,21 @@ func New(config Config) (*Kuta, error) {
 		basePath = defaultBasePath
 	}
 
-	sessionManager := core.NewSessionManager(
-		*sessionConfig,
-		config.Database,
-		cacheAdapter,
-	)
+	sessionService := services.NewSessionService(*sessionConfig, config.Database, cacheAdapter)
+	authService := services.NewAuthService(&config.Database, &passwordHasher, sessionService)
 
 	kuta := &Kuta{
-		SessionManager: sessionManager,
-		PasswordHasher: passwordHasher,
+		SessionManager: sessionService,
+		AuthService:    authService,
+		Database:       config.Database,
 		Secret:         config.Secret,
 		BasePath:       basePath,
 	}
 
-	if err := config.HTTP.RegisterRoutes(kuta); err != nil {
+	if err := config.HTTP.RegisterRoutes(authService, basePath, sessionConfig.MaxAge); err != nil {
 		return nil, err
 	}
 
+	// return kuta instance to provide more options for testing
 	return kuta, nil
 }

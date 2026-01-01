@@ -1,14 +1,17 @@
-package core
+package services
 
 import (
 	"errors"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/lborres/kuta/core"
+	"github.com/lborres/kuta/pkg/cache"
 )
 
 type MockSessionStorage struct {
-	sessions  map[string]*Session
+	sessions  map[string]*core.Session
 	mu        sync.RWMutex // make mock storage thread safe
 	createErr error
 	getErr    error
@@ -17,11 +20,11 @@ type MockSessionStorage struct {
 
 func NewMockSessionStorage() *MockSessionStorage {
 	return &MockSessionStorage{
-		sessions: make(map[string]*Session),
+		sessions: make(map[string]*core.Session),
 	}
 }
 
-func (m *MockSessionStorage) CreateSession(session *Session) error {
+func (m *MockSessionStorage) CreateSession(session *core.Session) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -32,7 +35,7 @@ func (m *MockSessionStorage) CreateSession(session *Session) error {
 	return nil
 }
 
-func (m *MockSessionStorage) GetSessionByHash(tokenHash string) (*Session, error) {
+func (m *MockSessionStorage) GetSessionByHash(tokenHash string) (*core.Session, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -46,7 +49,7 @@ func (m *MockSessionStorage) GetSessionByHash(tokenHash string) (*Session, error
 	return session, nil
 }
 
-func (m *MockSessionStorage) GetSessionByID(id string) (*Session, error) {
+func (m *MockSessionStorage) GetSessionByID(id string) (*core.Session, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -58,11 +61,11 @@ func (m *MockSessionStorage) GetSessionByID(id string) (*Session, error) {
 	return nil, errors.New("session not found")
 }
 
-func (m *MockSessionStorage) GetUserSessions(userID string) ([]*Session, error) {
+func (m *MockSessionStorage) GetUserSessions(userID string) ([]*core.Session, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	var sessions []*Session
+	var sessions []*core.Session
 	for _, session := range m.sessions {
 		if session.UserID == userID {
 			sessions = append(sessions, session)
@@ -71,7 +74,7 @@ func (m *MockSessionStorage) GetUserSessions(userID string) ([]*Session, error) 
 	return sessions, nil
 }
 
-func (m *MockSessionStorage) UpdateSession(session *Session) error {
+func (m *MockSessionStorage) UpdateSession(session *core.Session) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -135,7 +138,7 @@ func (m *MockSessionStorage) DeleteExpiredSessions() (int, error) {
 
 func TestSessionManagerCreateShouldGenerateValidSessionAndToken(t *testing.T) {
 	storage := NewMockSessionStorage()
-	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
+	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
 
 	result, err := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 	if err != nil {
@@ -188,7 +191,7 @@ func TestSessionManagerCreateShouldGenerateValidSessionAndToken(t *testing.T) {
 
 func TestSessionManagerCreateMultipleUsersShouldProduceDistinctSessionsAndTokens(t *testing.T) {
 	storage := NewMockSessionStorage()
-	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
+	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
 
 	// Create sessions for different users
 	result1, _ := manager.Create("user1", "192.168.1.1", "Chrome")
@@ -214,7 +217,7 @@ func TestSessionManagerCreateMultipleUsersShouldProduceDistinctSessionsAndTokens
 
 func TestSessionManagerVerifyValidSessionShouldReturnSession(t *testing.T) {
 	storage := NewMockSessionStorage()
-	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
+	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
 
 	// Create a session
 	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
@@ -236,28 +239,28 @@ func TestSessionManagerVerifyValidSessionShouldReturnSession(t *testing.T) {
 
 func TestSessionManagerVerifyEmptyTokenShouldReturnErrInvalidToken(t *testing.T) {
 	storage := NewMockSessionStorage()
-	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
+	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
 
 	_, err := manager.Verify("")
-	if err != ErrInvalidToken {
-		t.Errorf("Expected ErrInvalidToken for empty token, got %v", err)
+	if err != core.ErrInvalidToken {
+		t.Errorf("Expected core.ErrInvalidToken for empty token, got %v", err)
 	}
 }
 
 func TestSessionManagerVerifyInvalidTokenShouldReturnErrSessionNotFound(t *testing.T) {
 	storage := NewMockSessionStorage()
-	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
+	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
 
 	_, err := manager.Verify("invalid-token-that-doesnt-exist")
-	if err != ErrSessionNotFound {
-		t.Errorf("Expected ErrSessionNotFound for invalid token, got %v", err)
+	if err != core.ErrSessionNotFound {
+		t.Errorf("Expected core.ErrSessionNotFound for invalid token, got %v", err)
 	}
 }
 
 func TestSessionManagerVerifyExpiredSessionShouldReturnErrSessionExpiredAndDeleteItFromStorage(t *testing.T) {
 	storage := NewMockSessionStorage()
-	config := SessionConfig{MaxAge: 100 * time.Millisecond}
-	manager := NewSessionManager(config, storage, nil)
+	config := core.SessionConfig{MaxAge: 100 * time.Millisecond}
+	manager := NewSessionService(config, storage, nil)
 
 	// Create session
 	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
@@ -267,8 +270,8 @@ func TestSessionManagerVerifyExpiredSessionShouldReturnErrSessionExpiredAndDelet
 
 	// Verify should fail
 	_, err := manager.Verify(result.Token)
-	if err != ErrSessionExpired {
-		t.Errorf("Expected ErrSessionExpired, got %v", err)
+	if err != core.ErrSessionExpired {
+		t.Errorf("Expected core.ErrSessionExpired, got %v", err)
 	}
 
 	// Session should be deleted from storage
@@ -280,7 +283,7 @@ func TestSessionManagerVerifyExpiredSessionShouldReturnErrSessionExpiredAndDelet
 
 func TestSessionManagerVerifyStorageErrorShouldReturnErrSessionNotFound(t *testing.T) {
 	storage := NewMockSessionStorage()
-	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
+	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
 
 	// Create a session first
 	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
@@ -289,14 +292,14 @@ func TestSessionManagerVerifyStorageErrorShouldReturnErrSessionNotFound(t *testi
 	storage.getErr = errors.New("database connection lost")
 
 	_, err := manager.Verify(result.Token)
-	if err != ErrSessionNotFound {
-		t.Errorf("Expected ErrSessionNotFound when storage fails, got %v", err)
+	if err != core.ErrSessionNotFound {
+		t.Errorf("Expected core.ErrSessionNotFound when storage fails, got %v", err)
 	}
 }
 
 func TestSessionManagerDestroyBySessionIDShouldRemoveSession(t *testing.T) {
 	storage := NewMockSessionStorage()
-	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
+	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
 
 	// Create session
 	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
@@ -310,7 +313,7 @@ func TestSessionManagerDestroyBySessionIDShouldRemoveSession(t *testing.T) {
 
 	// Verify should fail
 	_, err = manager.Verify(result.Token)
-	if err != ErrSessionNotFound {
+	if err != core.ErrSessionNotFound {
 		t.Errorf("Session should be destroyed, got: %v", err)
 	}
 
@@ -323,7 +326,7 @@ func TestSessionManagerDestroyBySessionIDShouldRemoveSession(t *testing.T) {
 
 func TestSessionManagerDestroyBySessionIDNonExistentShouldNotPanic(t *testing.T) {
 	storage := NewMockSessionStorage()
-	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
+	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
 
 	// Try to destroy non-existent session
 	err := manager.DestroyBySessionID("nonexistent-id")
@@ -333,7 +336,7 @@ func TestSessionManagerDestroyBySessionIDNonExistentShouldNotPanic(t *testing.T)
 
 func TestSessionManagerDestroyAllUserSessionsShouldRemoveOnlyUserSessions(t *testing.T) {
 	storage := NewMockSessionStorage()
-	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
+	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
 
 	// Create multiple sessions for user123
 	result1, _ := manager.Create("user123", "192.168.1.1", "Chrome")
@@ -351,17 +354,17 @@ func TestSessionManagerDestroyAllUserSessionsShouldRemoveOnlyUserSessions(t *tes
 
 	// All user123 sessions should be invalid
 	_, err = manager.Verify(result1.Token)
-	if err != ErrSessionNotFound {
+	if err != core.ErrSessionNotFound {
 		t.Error("Session 1 should be destroyed")
 	}
 
 	_, err = manager.Verify(result2.Token)
-	if err != ErrSessionNotFound {
+	if err != core.ErrSessionNotFound {
 		t.Error("Session 2 should be destroyed")
 	}
 
 	_, err = manager.Verify(result3.Token)
-	if err != ErrSessionNotFound {
+	if err != core.ErrSessionNotFound {
 		t.Error("Session 3 should be destroyed")
 	}
 
@@ -389,7 +392,7 @@ func TestSessionManagerDestroyAllUserSessionsShouldRemoveOnlyUserSessions(t *tes
 
 func TestSessionManagerDestroyAllUserSessionsNoSessionsShouldNotError(t *testing.T) {
 	storage := NewMockSessionStorage()
-	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
+	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
 
 	// Try to destroy sessions for user with no sessions
 	err := manager.DestroyAllUserSessions("nonexistent-user")
@@ -408,8 +411,8 @@ func TestSessionManagerDefaultSessionConfigShouldSet24Hours(t *testing.T) {
 
 func TestSessionManagerCustomConfigShouldRespectMaxAge(t *testing.T) {
 	storage := NewMockSessionStorage()
-	config := SessionConfig{MaxAge: 1 * time.Hour}
-	manager := NewSessionManager(config, storage, nil)
+	config := core.SessionConfig{MaxAge: 1 * time.Hour}
+	manager := NewSessionService(config, storage, nil)
 
 	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 
@@ -423,7 +426,7 @@ func TestSessionManagerCustomConfigShouldRespectMaxAge(t *testing.T) {
 
 func TestSessionManagerConcurrentCreateShouldCreateMultipleSessions(t *testing.T) {
 	storage := NewMockSessionStorage()
-	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
+	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
 
 	// Create 100 sessions concurrently
 	done := make(chan bool, 100)
@@ -452,7 +455,7 @@ func TestSessionManagerConcurrentCreateShouldCreateMultipleSessions(t *testing.T
 
 func TestSessionManagerConcurrentVerifyShouldHandleConcurrentVerifies(t *testing.T) {
 	storage := NewMockSessionStorage()
-	manager := NewSessionManager(DefaultSessionConfig(), storage, nil)
+	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
 
 	// Create one session
 	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
@@ -486,11 +489,11 @@ func TestSessionManagerConcurrentVerifyShouldHandleConcurrentVerifies(t *testing
 
 func TestSessionManagerWithCacheHitShouldReturnFromCacheOnSecondVerify(t *testing.T) {
 	storage := NewMockSessionStorage()
-	cache := NewInMemoryCache(CacheConfig{
+	cache := cache.NewInMemoryCache(core.CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
-	manager := NewSessionManager(DefaultSessionConfig(), storage, cache)
+	manager := NewSessionService(DefaultSessionConfig(), storage, cache)
 
 	// Create session
 	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
@@ -502,7 +505,7 @@ func TestSessionManagerWithCacheHitShouldReturnFromCacheOnSecondVerify(t *testin
 	}
 
 	// Break storage to prove second verify uses cache
-	storage.getErr = ErrSessionNotFound
+	storage.getErr = core.ErrSessionNotFound
 
 	// Second verify should hit cache (storage is "broken")
 	session2, err := manager.Verify(result.Token)
@@ -522,11 +525,11 @@ func TestSessionManagerWithCacheHitShouldReturnFromCacheOnSecondVerify(t *testin
 
 func TestSessionManagerWithCacheMissShouldCacheSessionAfterVerify(t *testing.T) {
 	storage := NewMockSessionStorage()
-	cache := NewInMemoryCache(CacheConfig{
+	cache := cache.NewInMemoryCache(core.CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
-	manager := NewSessionManager(DefaultSessionConfig(), storage, cache)
+	manager := NewSessionService(DefaultSessionConfig(), storage, cache)
 
 	// Create session
 	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
@@ -545,11 +548,11 @@ func TestSessionManagerWithCacheMissShouldCacheSessionAfterVerify(t *testing.T) 
 
 func TestSessionManagerWithCacheDestroyInvalidatesCacheShouldClearCacheAfterDestroy(t *testing.T) {
 	storage := NewMockSessionStorage()
-	cache := NewInMemoryCache(CacheConfig{
+	cache := cache.NewInMemoryCache(core.CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
-	manager := NewSessionManager(DefaultSessionConfig(), storage, cache)
+	manager := NewSessionService(DefaultSessionConfig(), storage, cache)
 
 	// Create and verify session (caches it)
 	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
@@ -573,18 +576,18 @@ func TestSessionManagerWithCacheDestroyInvalidatesCacheShouldClearCacheAfterDest
 
 	// Verify should fail
 	_, err = manager.Verify(result.Token)
-	if err != ErrSessionNotFound {
+	if err != core.ErrSessionNotFound {
 		t.Error("Session should be destroyed")
 	}
 }
 
 func TestSessionManagerWithCacheDestroyByIDInvalidatesCacheShouldClearCache(t *testing.T) {
 	storage := NewMockSessionStorage()
-	cache := NewInMemoryCache(CacheConfig{
+	cache := cache.NewInMemoryCache(core.CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
-	manager := NewSessionManager(DefaultSessionConfig(), storage, cache)
+	manager := NewSessionService(DefaultSessionConfig(), storage, cache)
 
 	// Create and verify session (caches it)
 	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
@@ -604,11 +607,11 @@ func TestSessionManagerWithCacheDestroyByIDInvalidatesCacheShouldClearCache(t *t
 
 func TestSessionManagerWithCacheDestroyAllUserSessionsClearsCacheShouldClearCache(t *testing.T) {
 	storage := NewMockSessionStorage()
-	cache := NewInMemoryCache(CacheConfig{
+	cache := cache.NewInMemoryCache(core.CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
-	manager := NewSessionManager(DefaultSessionConfig(), storage, cache)
+	manager := NewSessionService(DefaultSessionConfig(), storage, cache)
 
 	// Create multiple sessions and cache them
 	result1, _ := manager.Create("user123", "192.168.1.1", "Chrome")
@@ -638,12 +641,12 @@ func TestSessionManagerWithCacheDestroyAllUserSessionsClearsCacheShouldClearCach
 
 func TestSessionManagerWithCacheExpiredInCacheShouldDetectExpiryAndRemoveFromCache(t *testing.T) {
 	storage := NewMockSessionStorage()
-	cache := NewInMemoryCache(CacheConfig{
+	cache := cache.NewInMemoryCache(core.CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
-	config := SessionConfig{MaxAge: 100 * time.Millisecond}
-	manager := NewSessionManager(config, storage, cache)
+	config := core.SessionConfig{MaxAge: 100 * time.Millisecond}
+	manager := NewSessionService(config, storage, cache)
 
 	// Create session
 	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
@@ -656,8 +659,8 @@ func TestSessionManagerWithCacheExpiredInCacheShouldDetectExpiryAndRemoveFromCac
 
 	// Verify should detect expiry and remove from cache
 	_, err := manager.Verify(result.Token)
-	if err != ErrSessionExpired {
-		t.Errorf("Expected ErrSessionExpired, got %v", err)
+	if err != core.ErrSessionExpired {
+		t.Errorf("Expected core.ErrSessionExpired, got %v", err)
 	}
 
 	// Cache should be invalidated

@@ -1,43 +1,16 @@
-package core
+package cache
 
 import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/lborres/kuta/core"
 )
 
-// TODO: Make this agnostic to whatever needs caching
-type Cache interface {
-	Get(tokenHash string) (*Session, error)
-	Set(tokenHash string, session *Session) error
-	Delete(tokenHash string) error
-	Clear() error
-}
-
-type CacheWithStats interface {
-	Cache
-	Stats() CacheStats
-}
-
-type CacheConfig struct {
-	TTL     time.Duration
-	MaxSize int
-}
-
-// CacheStats are simple counters for cache behavior.
-// These are intended for diagnostics and monitoring.
-type CacheStats struct {
-	Hits      int64         `json:"hits"`
-	Misses    int64         `json:"misses"`
-	Sets      int64         `json:"sets"`
-	Deletes   int64         `json:"deletes"`
-	Evictions int64         `json:"evictions"`
-	Size      int           `json:"size"`
-	TTL       time.Duration `json:"ttl"`
-}
-
+// InMemoryCache implements an in-memory session cache
 type InMemoryCache struct {
-	cache   map[string]*cachedRecord // key: token hash
+	cache   map[string]*cachedRecord
 	mu      sync.RWMutex
 	ttl     time.Duration
 	maxSize int
@@ -51,11 +24,12 @@ type InMemoryCache struct {
 }
 
 type cachedRecord struct {
-	session  *Session
+	session  *core.Session
 	cachedAt time.Time
 }
 
-func NewInMemoryCache(c CacheConfig) *InMemoryCache {
+// NewInMemoryCache creates a new in-memory cache
+func NewInMemoryCache(c core.CacheConfig) *InMemoryCache {
 	if c.TTL == 0 {
 		c.TTL = 5 * time.Minute
 	}
@@ -70,14 +44,15 @@ func NewInMemoryCache(c CacheConfig) *InMemoryCache {
 	}
 }
 
-func (c *InMemoryCache) Get(tokenHash string) (*Session, error) {
+// Get retrieves a session from cache
+func (c *InMemoryCache) Get(tokenHash string) (*core.Session, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	record, exists := c.cache[tokenHash]
 	if !exists {
 		atomic.AddInt64(&c.misses, 1)
-		return nil, ErrCacheNotFound
+		return nil, core.ErrCacheNotFound
 	}
 
 	if time.Since(record.cachedAt) > c.ttl {
@@ -90,14 +65,15 @@ func (c *InMemoryCache) Get(tokenHash string) (*Session, error) {
 		}
 
 		c.mu.RLock()
-		return nil, ErrCacheNotFound
+		return nil, core.ErrCacheNotFound
 	}
 
 	atomic.AddInt64(&c.hits, 1)
 	return record.session, nil
 }
 
-func (c *InMemoryCache) Set(tokenHash string, session *Session) error {
+// Set stores a session in cache
+func (c *InMemoryCache) Set(tokenHash string, session *core.Session) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -119,6 +95,7 @@ func (c *InMemoryCache) Set(tokenHash string, session *Session) error {
 	return nil
 }
 
+// Delete removes a session from cache
 func (c *InMemoryCache) Delete(tokenHash string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -129,6 +106,7 @@ func (c *InMemoryCache) Delete(tokenHash string) error {
 	return nil
 }
 
+// Clear removes all sessions from cache
 func (c *InMemoryCache) Clear() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -136,14 +114,16 @@ func (c *InMemoryCache) Clear() error {
 	return nil
 }
 
+// Len returns the number of cached sessions
 func (c *InMemoryCache) Len() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return len(c.cache)
 }
 
-func (c *InMemoryCache) Stats() CacheStats {
-	return CacheStats{
+// Stats returns cache statistics
+func (c *InMemoryCache) Stats() core.CacheStats {
+	return core.CacheStats{
 		Hits:      atomic.LoadInt64(&c.hits),
 		Misses:    atomic.LoadInt64(&c.misses),
 		Sets:      atomic.LoadInt64(&c.sets),
