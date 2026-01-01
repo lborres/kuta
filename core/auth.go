@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lborres/kuta/crypto"
+	"github.com/lborres/kuta/pkg/crypto"
 )
 
 // SignUpInput contains the data needed to register a new user

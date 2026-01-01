@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lborres/kuta/crypto"
+	"github.com/lborres/kuta/pkg/crypto"
 )
 
 type SessionConfig struct {

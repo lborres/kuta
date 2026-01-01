@@ -1,8 +1,6 @@
 package core
 
-import (
-	"github.com/lborres/kuta/crypto"
-)
+import "github.com/lborres/kuta/pkg/crypto"
 
 type Config struct {
 	Secret string

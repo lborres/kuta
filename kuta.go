@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/lborres/kuta/core"
-	"github.com/lborres/kuta/crypto"
+	"github.com/lborres/kuta/pkg/crypto"
 )
 
 // interfaces
