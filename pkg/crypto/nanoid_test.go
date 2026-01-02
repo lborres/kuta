@@ -6,98 +6,114 @@ import (
 	"testing"
 )
 
-func TestNanoIDNewCustomShouldValidateAlphabet(t *testing.T) {
+func TestNanoIDConstructor(t *testing.T) {
 	tests := []struct {
-		name          string
-		alphabet      string
-		expectedErr   bool
-		expectedNil   bool
-		checkAlphabet bool
+		name         string
+		args         []string
+		expectErr    bool
+		wantErr      error
+		wantAlphabet string
 	}{
-		{
-			name:          "creates generator with valid alphabet",
-			alphabet:      "ABCD",
-			expectedErr:   false,
-			expectedNil:   false,
-			checkAlphabet: true,
-		},
-		{
-			name:        "rejects empty alphabet",
-			alphabet:    "",
-			expectedErr: true,
-			expectedNil: true,
-		},
-		{
-			name:        "rejects alphabet larger than 255 characters",
-			alphabet:    strings.Repeat("a", 256),
-			expectedErr: true,
-			expectedNil: true,
-		},
-		{
-			name:        "accepts alphabet with 255 characters",
-			alphabet:    strings.Repeat("a", 255),
-			expectedErr: false,
-			expectedNil: false,
-		},
-		{
-			name:          "accepts small alphabet",
-			alphabet:      "AB",
-			expectedErr:   false,
-			expectedNil:   false,
-			checkAlphabet: true,
-		},
-		{
-			name:        "rejects alphabet with 300 characters",
-			alphabet:    strings.Repeat("x", 300),
-			expectedErr: true,
-			expectedNil: true,
-		},
+		{"empty args should use default alphabet", nil, false, nil, defaultAlphabet},
+		{"use custom alphabet", []string{"ABCDEFGH"}, false, nil, "ABCDEFGH"},
+
+		// Negative Scenarios
+		{"too many args", []string{"a", "b"}, true, ErrTooManyInputAlphabet, ""},
+		{"reject greater than max alphabet size", []string{strings.Repeat("a", 256)}, true, ErrAlphabetTooLong, ""},
+
+		// Edge cases
+		{"empty string should use default alphabet", []string{""}, false, nil, defaultAlphabet},
+		{"accept minimum alphabet size", []string{strings.Repeat("a", 8)}, false, nil, strings.Repeat("a", 8)},
+		{"accept max alphabet size", []string{strings.Repeat("a", 255)}, false, nil, strings.Repeat("a", 255)},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			nanoid, err := NewCustomNanoID(test.alphabet)
-
-			// Check error expectation
-			if (err != nil) != test.expectedErr {
-				t.Errorf("NewNanoIDGen() error = %v, expectedErr = %v", err, test.expectedErr)
+			nanoid, err := NewNanoID(test.args...)
+			if err != nil && !test.expectErr {
+				t.Fatalf("expected no error but got '%v'", err)
 			}
 
-			// Check nil generator expectation
-			if (nanoid == nil) != test.expectedNil {
-				t.Errorf("NewNanoIDGen() gen = %v, expectedNil = %v", nanoid, test.expectedNil)
+			if (err != nil) && err != test.wantErr {
+				t.Fatalf("expected error '%v' got '%v'", test.wantErr, err)
 			}
 
-			// Check alphabet is set correctly (only for valid cases)
-			if test.checkAlphabet && nanoid != nil && string(nanoid.alphabet) != test.alphabet {
-				t.Errorf("alphabet = %q, want %q", string(nanoid.alphabet), test.alphabet)
+			if nanoid == nil && !test.expectErr {
+				t.Fatalf("expected nanoid object, got nil")
+			}
+
+			if !test.expectErr && nanoid != nil && nanoid.alphabet != test.wantAlphabet {
+				t.Fatalf("expected alphabet %q, got %q", test.wantAlphabet, nanoid.alphabet)
 			}
 		})
 	}
 }
 
-func TestNanoIDNewShouldUseDefaultAlphabet(t *testing.T) {
-	nanoid := NewNanoID()
+func TestNanoIDGetMask(t *testing.T) {
+	t.Run("mask is power-of-two minus one and within bounds", func(t *testing.T) {
+		for alphabetLen := minAlphabetSize; alphabetLen <= maxAlphabetSize; alphabetLen++ {
+			mask := getMask(alphabetLen)
 
-	if nanoid == nil {
-		t.Fatal("NewNanoIDGen() returned nil")
+			// mask+1 must be a power of two
+			if ((mask + 1) & mask) != 0 {
+				t.Errorf("alphabetLen=%d: mask=%d, mask+1=%d is not power of 2", alphabetLen, mask, mask+1)
+			}
+
+			// mask must be strictly greater than alphabetLen-1
+			if mask <= alphabetLen-1 {
+				t.Errorf("alphabetLen=%d: mask=%d <= alphabetLen-1=%d", alphabetLen, mask, alphabetLen-1)
+			}
+
+			// mask should not exceed maxAlphabetSize
+			if mask > maxAlphabetSize {
+				t.Errorf("alphabetLen=%d: mask=%d > maxAlphabetSize=%d", alphabetLen, mask, maxAlphabetSize)
+			}
+		}
+	})
+}
+
+func TestNanoIDGetMaskBitmask(t *testing.T) {
+	tests := []struct {
+		alphabetLen int
+		wantMask    int
+	}{
+		{8, 15},    // 8 chars need mask 0b1111 (15)
+		{9, 15},    // 9 chars need mask 0b1111 (15)
+		{16, 31},   // 16 chars need mask 0b11111 (31)
+		{17, 31},   // 17 chars need mask 0b11111 (31)
+		{32, 63},   // 32 chars need mask 0b111111 (63)
+		{33, 63},   // 33 chars need mask 0b111111 (63)
+		{64, 127},  // 64 chars need mask 0b1111111 (127)
+		{65, 127},  // 65 chars need mask 0b1111111 (127)
+		{128, 255}, // 128 chars need mask 0b11111111 (255)
+		{200, 255}, // 200 chars need mask 0b11111111 (255)
+		{255, 255}, // 255 chars need mask 0b11111111 (255)
 	}
 
-	if string(nanoid.alphabet) != defaultAlphabet {
-		t.Errorf("alphabet = %q, expected %q", string(nanoid.alphabet), defaultAlphabet)
-	}
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("alphabet_%d", test.alphabetLen), func(t *testing.T) {
+			// Create alphabet of specific length
+			alphabet := strings.Repeat("a", test.alphabetLen)
+			nanoid, err := NewNanoID(alphabet)
+			if err != nil {
+				t.Fatalf("NewNanoID() error = %v", err)
+			}
 
-	if nanoid.mask == 0 {
-		t.Error("mask = 0, expected non-zero mask")
+			// The mask should be stored in the generator
+			if nanoid.mask != test.wantMask {
+				t.Errorf("expected %d (0b%b) mask for alphabet length %d, got %d (0b%b)",
+					test.wantMask, test.wantMask, test.alphabetLen, nanoid.mask, nanoid.mask)
+			}
+		})
 	}
 }
 
-func TestNanoIDGenerateShouldRespectLengthParameter(t *testing.T) {
-	nanoid := NewNanoID()
+func TestNanoIDGeneratedLength(t *testing.T) {
+	nanoid, _ := NewNanoID()
 
 	tests := []struct {
-		name     string
-		length   []int
-		expected int
+		name   string
+		length []int
+		want   int
 	}{
 		{"no argument uses default", []int{}, defaultSize},
 		{"explicit default", []int{defaultSize}, defaultSize},
@@ -112,61 +128,31 @@ func TestNanoIDGenerateShouldRespectLengthParameter(t *testing.T) {
 			var id string
 			var err error
 
-			if len(test.length) == 0 {
-				id, err = nanoid.Generate()
-			} else {
-				id, err = nanoid.Generate(test.length[0])
-			}
-
-			t.Logf("actual generated id: %s\n", id)
+			id, err = nanoid.Generate(test.length...)
 
 			if err != nil {
-				t.Fatalf("Generate() error = %v, expected nil", err)
+				t.Fatalf("expected nil error, got Generate() error = %v", err)
 			}
 
-			if len(id) != test.expected {
-				t.Errorf("len(id) = %d, expected %d", len(id), test.expected)
+			if len(id) != test.want {
+				t.Errorf("expected %d, got %d", test.want, len(id))
 			}
 		})
 	}
 }
 
-func TestNanoIDGenerateShouldUseOnlyAlphabetCharacters(t *testing.T) {
+func TestNanoIDGeneratedCharacters(t *testing.T) {
 	tests := []struct {
 		name     string
 		alphabet string
 		length   int
 	}{
-		{
-			name:     "default alphabet",
-			alphabet: defaultAlphabet,
-			length:   100,
-		},
-		{
-			name:     "custom alphabet",
-			alphabet: "ABCD1234",
-			length:   100,
-		},
-		{
-			name:     "numeric only",
-			alphabet: "0123456789",
-			length:   50,
-		},
-		{
-			name:     "lowercase only",
-			alphabet: "abcdefghijklmnopqrstuvwxyz",
-			length:   75,
-		},
-		{
-			name:     "two character alphabet",
-			alphabet: "AB",
-			length:   50,
-		},
-		{
-			name:     "single character alphabet",
-			alphabet: "X",
-			length:   30,
-		},
+		{"default alphabet", defaultAlphabet, 100},
+		{"custom alphabet", "ABCD1234", 100},
+		{"numeric only", "0123456789", 50},
+		{"lowercase only", "abcdefghijklmnopqrstuvwxyz", 75},
+		{"two character alphabet", "AB", 50},
+		{"single character alphabet", "X", 30},
 	}
 
 	for _, test := range tests {
@@ -176,9 +162,9 @@ func TestNanoIDGenerateShouldUseOnlyAlphabetCharacters(t *testing.T) {
 
 			// Use default or custom alphabet
 			if test.alphabet == defaultAlphabet {
-				nanoid = NewNanoID()
+				nanoid, _ = NewNanoID()
 			} else {
-				nanoid, err = NewCustomNanoID(test.alphabet)
+				nanoid, err = NewNanoID(test.alphabet)
 				if err != nil {
 					t.Fatalf("NewNanoID() error = %v", err)
 				}
@@ -200,10 +186,10 @@ func TestNanoIDGenerateShouldUseOnlyAlphabetCharacters(t *testing.T) {
 	}
 }
 
-func TestNanoIDGenerateShouldProduceUniqueIDs(t *testing.T) {
-	nanoid := NewNanoID()
+func TestNanoIDGenerateUniqueness(t *testing.T) {
+	nanoid, _ := NewNanoID()
 	seen := make(map[string]bool)
-	iterations := 10000
+	iterations := 100_000
 
 	for i := 0; i < iterations; i++ {
 		id, err := nanoid.Generate()
@@ -222,14 +208,14 @@ func TestNanoIDGenerateShouldProduceUniqueIDs(t *testing.T) {
 	}
 }
 
-func TestNanoIDGenerateShouldDistributeCharactersEvenly(t *testing.T) {
+func TestNanoIDGenerateCharacterDistribution(t *testing.T) {
 	t.Run("characters appear with equal probability", func(t *testing.T) {
-		alphabet := "ABCD"
-		nanoid, _ := NewCustomNanoID(alphabet)
+		alphabet := "ABCDEFGH"
+		nanoid, _ := NewNanoID(alphabet)
 		counts := make(map[rune]int)
 
-		iterations := 10000
-		idLength := 20
+		iterations := 100000
+		idLength := 22
 
 		for i := 0; i < iterations; i++ {
 			id, err := nanoid.Generate(idLength)
@@ -259,89 +245,18 @@ func TestNanoIDGenerateShouldDistributeCharactersEvenly(t *testing.T) {
 	})
 }
 
-func TestNanoIDGetMaskShouldReturnCorrectBitmask(t *testing.T) {
-	tests := []struct {
-		alphabetLen  int
-		expectedMask int
-	}{
-		{2, 3},     // 2 chars need mask 0b11 (3) - can represent 0-3
-		{4, 7},     // 4 chars need mask 0b111 (7) - can represent 0-7
-		{5, 7},     // 5 chars need mask 0b111 (7)
-		{8, 15},    // 8 chars need mask 0b1111 (15)
-		{9, 15},    // 9 chars need mask 0b1111 (15)
-		{16, 31},   // 16 chars need mask 0b11111 (31)
-		{17, 31},   // 17 chars need mask 0b11111 (31)
-		{32, 63},   // 32 chars need mask 0b111111 (63)
-		{33, 63},   // 33 chars need mask 0b111111 (63)
-		{64, 127},  // 64 chars need mask 0b1111111 (127)
-		{65, 127},  // 65 chars need mask 0b1111111 (127)
-		{128, 255}, // 128 chars need mask 0b11111111 (255)
-		{200, 255}, // 200 chars need mask 0b11111111 (255)
-		{255, 255}, // 255 chars need mask 0b11111111 (255)
-	}
-
-	for _, test := range tests {
-		t.Run(fmt.Sprintf("alphabet_%d", test.alphabetLen), func(t *testing.T) {
-			// Create alphabet of specific length
-			alphabet := strings.Repeat("a", test.alphabetLen)
-			nanoid, err := NewCustomNanoID(alphabet)
-			if err != nil {
-				t.Fatalf("NewCustomNanoID() error = %v", err)
-			}
-
-			// The mask should be stored in the generator
-			if nanoid.mask != test.expectedMask {
-				t.Errorf("mask for alphabet length %d. actual %d (0b%b), expected %d (0b%b)",
-					test.alphabetLen, nanoid.mask, nanoid.mask, test.expectedMask, test.expectedMask)
-			}
-		})
-	}
-}
-
-func TestNanoIDGetMaskShouldHaveCorrectProperties(t *testing.T) {
-	t.Run("mask is always (power of 2) - 1", func(t *testing.T) {
-		for alphabetLen := 2; alphabetLen <= 255; alphabetLen++ {
-			mask := getMask(alphabetLen)
-
-			// Check if mask+1 is a power of 2
-			// Power of 2 has only one bit set: (n+1) & n == 0
-			isPowerOf2 := (mask+1)&mask == 0
-
-			if !isPowerOf2 {
-				t.Errorf("alphabetLen=%d: mask=%d, mask+1=%d is not power of 2",
-					alphabetLen, mask, mask+1)
-			}
-		}
-	})
-
-	t.Run("mask is always > alphabetLen - 1", func(t *testing.T) {
-		for alphabetLen := 2; alphabetLen <= 255; alphabetLen++ {
-			mask := getMask(alphabetLen)
-
-			if mask <= alphabetLen-1 {
-				t.Errorf("alphabetLen=%d: mask=%d should be > alphabetLen-1=%d",
-					alphabetLen, mask, alphabetLen-1)
-			}
-		}
-	})
-}
-
-func TestNanoIDGenerateShouldHandleEdgeCases(t *testing.T) {
+func TestNanoIDGenerateEdgeCases(t *testing.T) {
 	tests := []struct {
 		name     string
 		alphabet string
 		length   int
 	}{
-		{"minimum length 1", "ABCD", 1},
-		{"large length", "ABCD", 200},
-		{"single char alphabet", "X", 50},
-		{"two char alphabet", "AB", 50},
-		{"power of 2 alphabet (4)", "ABCD", 30},
+		{"minimum length 1", "ABCDEFGH", 1},
+		{"large length", "ABCDEFGH", 200},
 		{"power of 2 alphabet (8)", "ABCDEFGH", 30},
 		{"power of 2 alphabet (16)", "ABCDEFGHIJKLMNOP", 30},
 		{"power of 2 alphabet (32)", strings.Repeat("ABCDEFGHIJKLMNOP", 2), 30},
 		{"power of 2 alphabet (64)", strings.Repeat("ABCDEFGHIJKLMNOP", 4), 30},
-		{"non-power of 2 (5)", "ABCDE", 30},
 		{"non-power of 2 (10)", "0123456789", 30},
 		{"non-power of 2 (26)", "abcdefghijklmnopqrstuvwxyz", 30},
 		{"large alphabet (200)", strings.Repeat("abcdefghijklmnopqrstuvwxyz", 8)[:200], 30},
@@ -350,9 +265,9 @@ func TestNanoIDGenerateShouldHandleEdgeCases(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			nanoid, err := NewCustomNanoID(test.alphabet)
+			nanoid, err := NewNanoID(test.alphabet)
 			if err != nil {
-				t.Fatalf("NewCustomNanoID() error = %v", err)
+				t.Fatalf("NewNanoID() error = %v", err)
 			}
 
 			id, err := nanoid.Generate(test.length)
@@ -374,8 +289,8 @@ func TestNanoIDGenerateShouldHandleEdgeCases(t *testing.T) {
 	}
 }
 
-func TestNanoIDGenerateShouldHandleLengthVariations(t *testing.T) {
-	nanoid := NewNanoID()
+func TestNanoIDGenerateLengthVariations(t *testing.T) {
+	nanoid, _ := NewNanoID()
 
 	tests := []struct {
 		name   string
@@ -404,31 +319,9 @@ func TestNanoIDGenerateShouldHandleLengthVariations(t *testing.T) {
 	}
 }
 
-func TestNanoIDGenerateShouldProduceUniqueIDsFromSameGenerator(t *testing.T) {
-	nanoid := NewNanoID()
-	ids := make(map[string]bool)
-
-	// Generate 100 IDs with same generator
-	for i := 0; i < 100; i++ {
-		id, err := nanoid.Generate()
-		if err != nil {
-			t.Fatalf("iteration %d: Generate() error = %v", i, err)
-		}
-
-		if ids[id] {
-			t.Errorf("duplicate ID on iteration %d: %q", i, id)
-		}
-		ids[id] = true
-
-		if len(id) != defaultSize {
-			t.Errorf("iteration %d: len(id) = %d, want %d", i, len(id), defaultSize)
-		}
-	}
-}
-
-func TestNanoIDGenerateShouldBeConcurrencySafe(t *testing.T) {
+func TestNanoIDGenerateConcurrency(t *testing.T) {
 	t.Run("safe for concurrent use", func(t *testing.T) {
-		nanoid := NewNanoID()
+		nanoid, _ := NewNanoID()
 		const goroutines = 100
 		results := make(chan string, goroutines)
 		errors := make(chan error, goroutines)
@@ -466,15 +359,11 @@ func TestNanoIDGenerateShouldBeConcurrencySafe(t *testing.T) {
 	})
 }
 
-func TestNanoIDGenerateShouldHandleAlphabetBoundaries(t *testing.T) {
+func TestNanoIDGenerateAlphabetBoundaries(t *testing.T) {
 	tests := []struct {
 		name        string
 		alphabetLen int
 	}{
-		{"boundary at 2", 2},
-		{"boundary at 3", 3},
-		{"boundary at 4", 4},
-		{"boundary at 7", 7},
 		{"boundary at 8", 8},
 		{"boundary at 15", 15},
 		{"boundary at 16", 16},
@@ -491,9 +380,9 @@ func TestNanoIDGenerateShouldHandleAlphabetBoundaries(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			alphabet := strings.Repeat("a", test.alphabetLen)
-			nanoid, err := NewCustomNanoID(alphabet)
+			nanoid, err := NewNanoID(alphabet)
 			if err != nil {
-				t.Fatalf("NewCustomNanoID() error = %v", err)
+				t.Fatalf("NewNanoID() error = %v", err)
 			}
 
 			// Generate multiple IDs to ensure mask works correctly
@@ -512,4 +401,30 @@ func TestNanoIDGenerateShouldHandleAlphabetBoundaries(t *testing.T) {
 			}
 		})
 	}
+}
+
+// BenchmarkNanoIDUniqueness tests uniqueness at scale
+// Run with: go test -bench=BenchmarkNanoIDUniqueness -benchmem -benchtime=100000x
+// For more confidence: -benchtime=1000000x or -benchtime=10000000x
+func BenchmarkNanoIDUniqueness(b *testing.B) {
+	nanoid, _ := NewNanoID()
+	seen := make(map[string]struct{}, b.N) // struct{} uses less memory than bool
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		id, err := nanoid.Generate()
+		if err != nil {
+			b.Fatalf("iteration %d: Generate() error = %v", i, err)
+		}
+
+		if _, exists := seen[id]; exists {
+			b.Fatalf("COLLISION DETECTED at iteration %d: %q (out of %d IDs generated)", i, id, len(seen))
+		}
+		seen[id] = struct{}{}
+	}
+
+	// Report total unique IDs as custom metric
+	b.ReportMetric(float64(len(seen)), "unique_ids")
 }
