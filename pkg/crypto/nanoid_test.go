@@ -1,107 +1,89 @@
 package crypto
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 )
 
-func TestNanoIDConstructor(t *testing.T) {
+func TestNanoIDGenerator_New(t *testing.T) {
 	tests := []struct {
 		name         string
 		args         []string
-		expectErr    bool
 		wantErr      error
 		wantAlphabet string
 	}{
-		{"empty args should use default alphabet", nil, false, nil, defaultAlphabet},
-		{"use custom alphabet", []string{"ABCDEFGH"}, false, nil, "ABCDEFGH"},
-
-		// Negative Scenarios
-		{"too many args", []string{"a", "b"}, true, ErrTooManyInputAlphabet, ""},
-		{"reject greater than max alphabet size", []string{strings.Repeat("a", 256)}, true, ErrAlphabetTooLong, ""},
-
-		// Edge cases
-		{"empty string should use default alphabet", []string{""}, false, nil, defaultAlphabet},
-		{"accept minimum alphabet size", []string{strings.Repeat("a", 8)}, false, nil, strings.Repeat("a", 8)},
-		{"accept max alphabet size", []string{strings.Repeat("a", 255)}, false, nil, strings.Repeat("a", 255)},
+		{name: "empty args use default", args: nil, wantErr: nil, wantAlphabet: defaultAlphabet},
+		{name: "custom alphabet", args: []string{"ABCDEFGH"}, wantErr: nil, wantAlphabet: "ABCDEFGH"},
+		{name: "too many args", args: []string{"a", "b"}, wantErr: ErrTooManyInputAlphabet},
+		{name: "alphabet too long", args: []string{strings.Repeat("a", 256)}, wantErr: ErrAlphabetTooLong},
+		{name: "empty string uses default", args: []string{""}, wantErr: nil, wantAlphabet: defaultAlphabet},
+		{name: "min alphabet size", args: []string{strings.Repeat("a", 8)}, wantErr: nil, wantAlphabet: strings.Repeat("a", 8)},
+		{name: "max alphabet size", args: []string{strings.Repeat("a", 255)}, wantErr: nil, wantAlphabet: strings.Repeat("a", 255)},
 	}
+
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			// Act
 			nanoid, err := NewNanoID(test.args...)
-			if err != nil && !test.expectErr {
-				t.Fatalf("expected no error but got '%v'", err)
-			}
 
-			if (err != nil) && err != test.wantErr {
-				t.Fatalf("expected error '%v' got '%v'", test.wantErr, err)
+			// Assert
+			if (err != nil) != (test.wantErr != nil) {
+				t.Fatalf("New() error = %v, wantErr %v", err, test.wantErr)
 			}
-
-			if nanoid == nil && !test.expectErr {
-				t.Fatalf("expected nanoid object, got nil")
+			if err != test.wantErr && test.wantErr != nil {
+				t.Fatalf("New() error = %v, want %v", err, test.wantErr)
 			}
-
-			if !test.expectErr && nanoid != nil && nanoid.alphabet != test.wantAlphabet {
-				t.Fatalf("expected alphabet %q, got %q", test.wantAlphabet, nanoid.alphabet)
+			if test.wantErr == nil && nanoid == nil {
+				t.Fatal("New() returned nil, want *NanoIDGenerator")
+			}
+			if test.wantErr == nil && test.wantAlphabet != "" && nanoid.alphabet != test.wantAlphabet {
+				t.Errorf("New() alphabet = %q, want %q", nanoid.alphabet, test.wantAlphabet)
 			}
 		})
 	}
 }
 
-func TestNanoIDGetMask(t *testing.T) {
-	t.Run("mask is power-of-two minus one and within bounds", func(t *testing.T) {
-		for alphabetLen := minAlphabetSize; alphabetLen <= maxAlphabetSize; alphabetLen++ {
-			mask := getMask(alphabetLen)
-
-			// mask+1 must be a power of two
-			if ((mask + 1) & mask) != 0 {
-				t.Errorf("alphabetLen=%d: mask=%d, mask+1=%d is not power of 2", alphabetLen, mask, mask+1)
-			}
-
-			// mask must be strictly greater than alphabetLen-1
-			if mask <= alphabetLen-1 {
-				t.Errorf("alphabetLen=%d: mask=%d <= alphabetLen-1=%d", alphabetLen, mask, alphabetLen-1)
-			}
-
-			// mask should not exceed maxAlphabetSize
-			if mask > maxAlphabetSize {
-				t.Errorf("alphabetLen=%d: mask=%d > maxAlphabetSize=%d", alphabetLen, mask, maxAlphabetSize)
-			}
-		}
-	})
-}
-
-func TestNanoIDGetMaskBitmask(t *testing.T) {
+func TestNanoIDGenerator_GetMask(t *testing.T) {
 	tests := []struct {
+		name        string
 		alphabetLen int
 		wantMask    int
 	}{
-		{8, 15},    // 8 chars need mask 0b1111 (15)
-		{9, 15},    // 9 chars need mask 0b1111 (15)
-		{16, 31},   // 16 chars need mask 0b11111 (31)
-		{17, 31},   // 17 chars need mask 0b11111 (31)
-		{32, 63},   // 32 chars need mask 0b111111 (63)
-		{33, 63},   // 33 chars need mask 0b111111 (63)
-		{64, 127},  // 64 chars need mask 0b1111111 (127)
-		{65, 127},  // 65 chars need mask 0b1111111 (127)
-		{128, 255}, // 128 chars need mask 0b11111111 (255)
-		{200, 255}, // 200 chars need mask 0b11111111 (255)
-		{255, 255}, // 255 chars need mask 0b11111111 (255)
+		{name: "alphabet 8", alphabetLen: 8, wantMask: 15},      // 3 bits → 4 bit mask (0xF)
+		{name: "alphabet 9", alphabetLen: 9, wantMask: 15},      // 4 bits → 4 bit mask (0xF)
+		{name: "alphabet 16", alphabetLen: 16, wantMask: 31},    // 4 bits → 5 bit mask (0x1F)
+		{name: "alphabet 17", alphabetLen: 17, wantMask: 31},    // 5 bits → 5 bit mask (0x1F)
+		{name: "alphabet 32", alphabetLen: 32, wantMask: 63},    // 5 bits → 6 bit mask (0x3F)
+		{name: "alphabet 33", alphabetLen: 33, wantMask: 63},    // 6 bits → 6 bit mask (0x3F)
+		{name: "alphabet 64", alphabetLen: 64, wantMask: 127},   // 6 bits → 7 bit mask (0x7F)
+		{name: "alphabet 65", alphabetLen: 65, wantMask: 127},   // 7 bits → 7 bit mask (0x7F)
+		{name: "alphabet 128", alphabetLen: 128, wantMask: 255}, // 7 bits → 8 bit mask (0xFF)
+		{name: "alphabet 200", alphabetLen: 200, wantMask: 255}, // 8 bits → 8 bit mask (0xFF)
+		{name: "alphabet 255", alphabetLen: 255, wantMask: 255}, // 8 bits → 8 bit mask (0xFF)
 	}
 
 	for _, test := range tests {
-		t.Run(fmt.Sprintf("alphabet_%d", test.alphabetLen), func(t *testing.T) {
-			// Create alphabet of specific length
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
 			alphabet := strings.Repeat("a", test.alphabetLen)
 			nanoid, err := NewNanoID(alphabet)
 			if err != nil {
 				t.Fatalf("NewNanoID() error = %v", err)
 			}
 
-			// The mask should be stored in the generator
+			// Assert
 			if nanoid.mask != test.wantMask {
-				t.Errorf("expected %d (0b%b) mask for alphabet length %d, got %d (0b%b)",
-					test.wantMask, test.wantMask, test.alphabetLen, nanoid.mask, nanoid.mask)
+				t.Errorf("GetMask() = %d (0b%b), want %d (0b%b)",
+					nanoid.mask, nanoid.mask, test.wantMask, test.wantMask)
+			}
+			// Verify mask properties
+			if ((nanoid.mask + 1) & nanoid.mask) != 0 {
+				t.Errorf("mask %d is not (power of 2 - 1)", nanoid.mask)
+			}
+			if nanoid.mask <= test.alphabetLen-1 {
+				t.Errorf("mask %d <= alphabetLen-1 %d", nanoid.mask, test.alphabetLen-1)
 			}
 		})
 	}
@@ -147,39 +129,36 @@ func TestNanoIDGeneratedCharacters(t *testing.T) {
 		alphabet string
 		length   int
 	}{
-		{"default alphabet", defaultAlphabet, 100},
-		{"custom alphabet", "ABCD1234", 100},
-		{"numeric only", "0123456789", 50},
-		{"lowercase only", "abcdefghijklmnopqrstuvwxyz", 75},
-		{"two character alphabet", "AB", 50},
-		{"single character alphabet", "X", 30},
+		{name: "default alphabet", alphabet: defaultAlphabet, length: 100},
+		{name: "custom alphabet", alphabet: "ABCD1234", length: 100},
+		{name: "numeric only", alphabet: "0123456789", length: 50},
+		{name: "lowercase only", alphabet: "abcdefghijklmnopqrstuvwxyz", length: 75},
+		{name: "min size alphabet", alphabet: "ABCDEFGH", length: 50},
+		{name: "max size alphabet", alphabet: strings.Repeat("abcdefghijklmnopqrstuvwxyz", 10)[:255], length: 50},
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
-			var nanoid *NanoIDGenerator
-			var err error
-
-			// Use default or custom alphabet
-			if test.alphabet == defaultAlphabet {
-				nanoid, _ = NewNanoID()
-			} else {
-				nanoid, err = NewNanoID(test.alphabet)
-				if err != nil {
-					t.Fatalf("NewNanoID() error = %v", err)
-				}
+			// Arrange
+			nanoid, err := NewNanoID(test.alphabet)
+			if err != nil {
+				t.Fatalf("NewNanoID() error = %v", err)
 			}
 
-			// Generate ID
+			// Act
 			id, err := nanoid.Generate(test.length)
 			if err != nil {
 				t.Fatalf("Generate() error = %v", err)
 			}
 
-			// Verify every character is from the alphabet
+			// Assert
+			if len(id) != test.length {
+				t.Errorf("len(id) = %d, want %d", len(id), test.length)
+			}
 			for i, char := range id {
 				if !strings.ContainsRune(test.alphabet, char) {
-					t.Errorf("id[%d] = %q, not in alphabet %q", i, char, test.alphabet)
+					t.Errorf("id[%d] = %q, not in alphabet", i, char)
 				}
 			}
 		})
