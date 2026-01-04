@@ -32,15 +32,18 @@ func logFormat() string {
 		// Request details
 		"${method}|${path}|${queryParams}",
 
-		// Request body & errors
-		"${body}|${error}",
+		// Request body
+		// "${body}",
+
+		// errors
+		"${errors}",
 	}
 	return strings.Join(format, "|") + "\n"
 }
 
 func main() {
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, "postgres://postgres:postgres@localhost:5432/kuta_test?sslmode=disable")
+	pool, err := pgxpool.New(ctx, "postgres://myuser:mypassword@localhost:5436/kuta?sslmode=disable")
 	if err != nil {
 		log.Fatalf("pgxpool.New: %v", err)
 	}
@@ -60,7 +63,7 @@ func main() {
 	_, err = kuta.New(kuta.Config{
 		// WARN: Demonstration purposes only
 		// provide your secret in a more secure way such as environment variables
-		Secret: "mysupersecretsecret",
+		Secret: "secretshouldbeatleast32charslong",
 
 		Database:      pgxadapter.New(pool),
 		HTTP:          fiberadapter.New(app),

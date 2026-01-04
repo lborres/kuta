@@ -31,10 +31,10 @@ var (
 
 // Config errors (server-side configuration)
 var (
-	ErrDBAdapterRequired   = errors.New("database adapter is required")          // 500
-	ErrHTTPAdapterRequired = errors.New("adapter is required")                   // 500
-	ErrSecretRequired      = errors.New("secret is required")                    // 500
-	ErrSecretTooShort      = errors.New("secret must be at least 32 characters") // 500
+	ErrDBAdapterRequired   = errors.New("database adapter is required") // 500
+	ErrHTTPAdapterRequired = errors.New("adapter is required")          // 500
+	ErrSecretRequired      = errors.New("secret is required")           // 500
+	ErrSecretTooShort      = errors.New("secret too short")             // 500
 )
 
 var (

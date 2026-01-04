@@ -4,12 +4,22 @@ import (
 	"crypto/rand"
 	"errors"
 	"math"
+	"unicode/utf8"
 )
 
 const (
 	defaultAlphabet string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
-	defaultSize     int    = 21
+	defaultSize     int    = 22 // 22 * 6 = 132 bits (uuid is 128 bits) of entropy
 	maxAlphabetSize int    = 255
+	minAlphabetSize int    = 8
+)
+
+var (
+	ErrTooManyInputAlphabet = errors.New("must only provide 1 set of alphabet")
+	ErrAlphabetTooLong      = errors.New("alphabet must contain no more than 255 characters")
+	ErrAlphabetTooShort     = errors.New("alphabet must contain at least 8 characters")
+	ErrAlphabetInvalidUTF8  = errors.New("alphabet must contain valid UTF-8")
+	ErrAlphabetNotASCII     = errors.New("alphabet must contain only ASCII characters")
 )
 
 type NanoIDGenerator struct {
@@ -27,26 +37,39 @@ func getMask(alphabetLen int) int {
 	return maxAlphabetSize // Max mask for 8 bits
 }
 
-func NewCustomNanoID(alphabet string) (*NanoIDGenerator, error) {
-	if alphabet == "" {
-		return nil, errors.New("alphabet cannot be empty")
+func NewNanoID(a ...string) (*NanoIDGenerator, error) {
+	if len(a) > 1 {
+		return nil, ErrTooManyInputAlphabet
+	}
+
+	alphabet := defaultAlphabet
+	if !(len(a) == 0 || a[0] == "") {
+		alphabet = a[0]
+	}
+
+	if !utf8.ValidString(alphabet) {
+		return nil, ErrAlphabetInvalidUTF8
+	}
+
+	// Verify all characters are ASCII (single-byte UTF-8)
+	// This is required because Generate() indexes by byte position
+	for _, r := range alphabet {
+		if r > 127 {
+			return nil, ErrAlphabetNotASCII
+		}
 	}
 
 	if len(alphabet) > maxAlphabetSize {
-		return nil, errors.New("alphabet must contain no more than 255 characters")
+		return nil, ErrAlphabetTooLong
+	}
+	if len(alphabet) < minAlphabetSize {
+		return nil, ErrAlphabetTooShort
 	}
 
 	return &NanoIDGenerator{
 		alphabet: alphabet,
 		mask:     getMask(len(alphabet)),
 	}, nil
-}
-
-func NewNanoID() *NanoIDGenerator {
-	return &NanoIDGenerator{
-		alphabet: defaultAlphabet,
-		mask:     getMask(len(defaultAlphabet)),
-	}
 }
 
 func (n *NanoIDGenerator) Generate(length ...int) (string, error) {

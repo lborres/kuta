@@ -9,7 +9,7 @@ type Adapter struct {
 	pool *pgxpool.Pool
 }
 
-var _ kuta.AuthStorage = (*Adapter)(nil)
+var _ kuta.StorageProvider = (*Adapter)(nil)
 
 func New(pool *pgxpool.Pool) *Adapter {
 	return &Adapter{

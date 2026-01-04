@@ -1,5 +1,7 @@
 package core
 
-type HTTPAdapter interface {
-	RegisterRoutes(k *Kuta) error
+import "time"
+
+type HTTPProvider interface {
+	RegisterRoutes(handler AuthProvider, basePath string, ttl time.Duration) error
 }

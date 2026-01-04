@@ -1,4 +1,4 @@
-.PHONY: test test-verbose test-coverage test-race clean
+.PHONY: test test-verbose test-coverage test-race test-integration clean
 
 # Run all tests
 test:
@@ -28,6 +28,9 @@ test-race:
 
 # Run all quality checks (recommended before commit)
 test-all: test-race test-coverage
+
+test-integration:
+	go test ./... -v -tags=integration
 
 # Clean test cache and coverage files
 clean:

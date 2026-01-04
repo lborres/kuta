@@ -1,17 +1,19 @@
-package core
+package cache
 
 import (
 	"testing"
 	"time"
+
+	"github.com/lborres/kuta/core"
 )
 
 func TestInMemoryCacheGetSetShouldStoreAndRetrieve(t *testing.T) {
-	cache := NewInMemoryCache(CacheConfig{
+	cache := NewInMemoryCache(core.CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
 
-	session := &Session{
+	session := &core.Session{
 		ID:        "session123",
 		UserID:    "user456",
 		TokenHash: "hash789",
@@ -42,24 +44,24 @@ func TestInMemoryCacheGetSetShouldStoreAndRetrieve(t *testing.T) {
 }
 
 func TestInMemoryCacheGetNonExistentShouldReturnErrCacheNotFound(t *testing.T) {
-	cache := NewInMemoryCache(CacheConfig{
+	cache := NewInMemoryCache(core.CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
 
 	_, err := cache.Get("nonexistent")
-	if err != ErrCacheNotFound {
-		t.Errorf("Expected ErrCacheNotFound, got %v", err)
+	if err != core.ErrCacheNotFound {
+		t.Errorf("Expected core.ErrCacheNotFound, got %v", err)
 	}
 }
 
 func TestInMemoryCacheExpiryShouldExpireEntriesAfterTTL(t *testing.T) {
-	cache := NewInMemoryCache(CacheConfig{
+	cache := NewInMemoryCache(core.CacheConfig{
 		TTL:     100 * time.Millisecond,
 		MaxSize: 500,
 	})
 
-	session := &Session{
+	session := &core.Session{
 		ID:        "session123",
 		TokenHash: "hash789",
 		ExpiresAt: time.Now().Add(24 * time.Hour),
@@ -80,7 +82,7 @@ func TestInMemoryCacheExpiryShouldExpireEntriesAfterTTL(t *testing.T) {
 
 	// Should be expired and removed from cache
 	_, err = cache.Get("hash789")
-	if err != ErrCacheNotFound {
+	if err != core.ErrCacheNotFound {
 		t.Error("Session should be expired and removed from cache")
 	}
 
@@ -90,12 +92,12 @@ func TestInMemoryCacheExpiryShouldExpireEntriesAfterTTL(t *testing.T) {
 }
 
 func TestInMemoryCacheDeleteShouldRemoveEntry(t *testing.T) {
-	cache := NewInMemoryCache(CacheConfig{
+	cache := NewInMemoryCache(core.CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
 
-	session := &Session{
+	session := &core.Session{
 		ID:        "session123",
 		TokenHash: "hash789",
 		ExpiresAt: time.Now().Add(24 * time.Hour),
@@ -118,13 +120,13 @@ func TestInMemoryCacheDeleteShouldRemoveEntry(t *testing.T) {
 
 	// Should not exist anymore
 	_, err = cache.Get("hash789")
-	if err != ErrCacheNotFound {
+	if err != core.ErrCacheNotFound {
 		t.Error("Session should be deleted")
 	}
 }
 
 func TestInMemoryCacheDeleteNonExistentShouldNotError(t *testing.T) {
-	cache := NewInMemoryCache(CacheConfig{
+	cache := NewInMemoryCache(core.CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
@@ -137,14 +139,14 @@ func TestInMemoryCacheDeleteNonExistentShouldNotError(t *testing.T) {
 }
 
 func TestInMemoryCacheClearShouldRemoveAllEntries(t *testing.T) {
-	cache := NewInMemoryCache(CacheConfig{
+	cache := NewInMemoryCache(core.CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
 
-	session1 := &Session{ID: "session1", TokenHash: "hash1", CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	session2 := &Session{ID: "session2", TokenHash: "hash2", CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	session3 := &Session{ID: "session3", TokenHash: "hash3", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	session1 := &core.Session{ID: "session1", TokenHash: "hash1", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	session2 := &core.Session{ID: "session2", TokenHash: "hash2", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	session3 := &core.Session{ID: "session3", TokenHash: "hash3", CreatedAt: time.Now(), UpdatedAt: time.Now()}
 
 	cache.Set("hash1", session1)
 	cache.Set("hash2", session2)
@@ -167,30 +169,30 @@ func TestInMemoryCacheClearShouldRemoveAllEntries(t *testing.T) {
 	}
 
 	_, err = cache.Get("hash1")
-	if err != ErrCacheNotFound {
+	if err != core.ErrCacheNotFound {
 		t.Error("hash1 should be cleared")
 	}
 
 	_, err = cache.Get("hash2")
-	if err != ErrCacheNotFound {
+	if err != core.ErrCacheNotFound {
 		t.Error("hash2 should be cleared")
 	}
 
 	_, err = cache.Get("hash3")
-	if err != ErrCacheNotFound {
+	if err != core.ErrCacheNotFound {
 		t.Error("hash3 should be cleared")
 	}
 }
 
 func TestInMemoryCacheMaxLenShouldEvictWhenOverCapacity(t *testing.T) {
-	cache := NewInMemoryCache(CacheConfig{
+	cache := NewInMemoryCache(core.CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 2,
 	}) // Max 2 entries
 
-	session1 := &Session{ID: "session1", TokenHash: "hash1", CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	session2 := &Session{ID: "session2", TokenHash: "hash2", CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	session3 := &Session{ID: "session3", TokenHash: "hash3", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	session1 := &core.Session{ID: "session1", TokenHash: "hash1", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	session2 := &core.Session{ID: "session2", TokenHash: "hash2", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	session3 := &core.Session{ID: "session3", TokenHash: "hash3", CreatedAt: time.Now(), UpdatedAt: time.Now()}
 
 	cache.Set("hash1", session1)
 	cache.Set("hash2", session2)
@@ -225,7 +227,7 @@ func TestInMemoryCacheMaxLenShouldEvictWhenOverCapacity(t *testing.T) {
 }
 
 func TestInMemoryCacheLenShouldReflectOperations(t *testing.T) {
-	cache := NewInMemoryCache(CacheConfig{
+	cache := NewInMemoryCache(core.CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
@@ -234,12 +236,12 @@ func TestInMemoryCacheLenShouldReflectOperations(t *testing.T) {
 		t.Error("New cache should be empty")
 	}
 
-	cache.Set("hash1", &Session{ID: "1", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+	cache.Set("hash1", &core.Session{ID: "1", CreatedAt: time.Now(), UpdatedAt: time.Now()})
 	if cache.Len() != 1 {
 		t.Errorf("Expected size 1, got %d", cache.Len())
 	}
 
-	cache.Set("hash2", &Session{ID: "2", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+	cache.Set("hash2", &core.Session{ID: "2", CreatedAt: time.Now(), UpdatedAt: time.Now()})
 	if cache.Len() != 2 {
 		t.Errorf("Expected size 2, got %d", cache.Len())
 	}
@@ -256,13 +258,13 @@ func TestInMemoryCacheLenShouldReflectOperations(t *testing.T) {
 }
 
 func TestInMemoryCacheConcurrentReadWriteShouldNotRaceOrPanic(t *testing.T) {
-	cache := NewInMemoryCache(CacheConfig{
+	cache := NewInMemoryCache(core.CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
 	done := make(chan bool, 200)
 
-	session := &Session{
+	session := &core.Session{
 		ID:        "session123",
 		TokenHash: "hash789",
 		CreatedAt: time.Now(),
@@ -294,14 +296,14 @@ func TestInMemoryCacheConcurrentReadWriteShouldNotRaceOrPanic(t *testing.T) {
 }
 
 func TestInMemoryCacheConcurrentDeleteShouldResultInEmptyCache(t *testing.T) {
-	cache := NewInMemoryCache(CacheConfig{
+	cache := NewInMemoryCache(core.CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 500,
 	})
 
 	// Pre-populate
 	for i := 0; i < 100; i++ {
-		session := &Session{ID: string(rune(i)), CreatedAt: time.Now(), UpdatedAt: time.Now()}
+		session := &core.Session{ID: string(rune(i)), CreatedAt: time.Now(), UpdatedAt: time.Now()}
 		cache.Set("hash"+string(rune(i)), session)
 	}
 
@@ -327,7 +329,7 @@ func TestInMemoryCacheConcurrentDeleteShouldResultInEmptyCache(t *testing.T) {
 }
 
 func TestInMemoryCacheStatsShouldCountHitsMissesSetsAndEvictions(t *testing.T) {
-	cache := NewInMemoryCache(CacheConfig{
+	cache := NewInMemoryCache(core.CacheConfig{
 		TTL:     5 * time.Minute,
 		MaxSize: 2,
 	})
@@ -339,11 +341,11 @@ func TestInMemoryCacheStatsShouldCountHitsMissesSetsAndEvictions(t *testing.T) {
 	}
 
 	// Set two entries
-	cache.Set("h1", &Session{ID: "1", TokenHash: "h1", CreatedAt: time.Now(), UpdatedAt: time.Now()})
-	cache.Set("h2", &Session{ID: "2", TokenHash: "h2", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+	cache.Set("h1", &core.Session{ID: "1", TokenHash: "h1", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+	cache.Set("h2", &core.Session{ID: "2", TokenHash: "h2", CreatedAt: time.Now(), UpdatedAt: time.Now()})
 
 	// This set should evict one entry
-	cache.Set("h3", &Session{ID: "3", TokenHash: "h3", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+	cache.Set("h3", &core.Session{ID: "3", TokenHash: "h3", CreatedAt: time.Now(), UpdatedAt: time.Now()})
 
 	// Hits and misses
 	if _, err := cache.Get("h1"); err != nil {
