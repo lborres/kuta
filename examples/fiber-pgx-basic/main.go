@@ -33,7 +33,9 @@ func logFormat() string {
 		"${method}|${path}|${queryParams}",
 
 		// Request body
-		// "${body}",
+		// WARN: This line exposes sensitive information in the logs.
+		// WARN: Remove this in production
+		"${reqHeader:Authorization}|${body}",
 
 		// errors
 		"${errors}",
@@ -60,7 +62,7 @@ func main() {
 		TimeZone:   "Local",
 	}))
 
-	_, err = kuta.New(kuta.Config{
+	k, err := kuta.New(kuta.Config{
 		// WARN: Demonstration purposes only
 		// provide your secret in a more secure way such as environment variables
 		Secret: "secretshouldbeatleast32charslong",
@@ -73,7 +75,23 @@ func main() {
 		log.Fatalf("could not create kuta instance: %v", err)
 	}
 
+	// Protect Endpoints with the kuta middleware
+	app.Get("/sensitive", k.Protected, SensitiveDataHandler)
+
 	if err := app.Listen(":8080"); err != nil {
 		log.Fatalf("app.Listen: %v", err)
 	}
+}
+
+// SensitiveDataHandler is an example protected endpoint that retrieves
+// user and session information from the context set by the middleware.
+func SensitiveDataHandler(c fiber.Ctx) error {
+	user := c.Locals("user").(*kuta.User)
+	session := c.Locals("session").(*kuta.Session)
+
+	return c.JSON(fiber.Map{
+		"message": "Access granted to sensitive data",
+		"user":    user,
+		"session": session,
+	})
 }

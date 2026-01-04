@@ -7,7 +7,7 @@ tmp_dir = ".tmp"
 [build]
   args_bin = []
   bin = "./.tmp/fiber-pgx-example.exe"
-  cmd = "go build -o ./.tmp/fiber-pgx-example.exe ./main.go"
+  cmd = "go build -o ./.tmp/fiber-pgx-example.exe ."
   delay = 1000
   entrypoint = ["./.tmp/fiber-pgx-example.exe"]
   exclude_dir = ["assets", ".tmp", ".tmp", "vendor", "testdata"]
