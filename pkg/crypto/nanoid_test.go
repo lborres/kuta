@@ -407,3 +407,69 @@ func BenchmarkNanoIDUniqueness(b *testing.B) {
 	// Report total unique IDs as custom metric
 	b.ReportMetric(float64(len(seen)), "unique_ids")
 }
+
+func FuzzNanoID_Generate(f *testing.F) {
+	// Richer seed corpus covering boundaries and edge cases
+	f.Add("", 0)                                                      // default alphabet, default length
+	f.Add("ABCDEFGH", 1)                                              // minimum alphabet size, minimum length
+	f.Add(strings.Repeat("abcdefghijklmnopqrstuvwxyz", 10)[:255], 22) // maximum alphabet size, default length
+	f.Add(defaultAlphabet, 0)                                         // default alphabet, default length
+	f.Add(defaultAlphabet, 22)                                        // explicit default length
+	f.Add(defaultAlphabet, -1)                                        // negative length (uses default)
+	f.Add(defaultAlphabet, 1000)                                      // large length
+	f.Add("0123456789", 100)                                          // numeric only
+	f.Add("abcdefghijklmnopqrstuvwxyz", 50)                           // lowercase only
+
+	f.Fuzz(func(t *testing.T, alphabet string, length int) {
+		// Normalize empty alphabet to default
+		if alphabet == "" {
+			alphabet = defaultAlphabet
+		}
+
+		// Guard: only test valid alphabet sizes per API contract
+		if len(alphabet) < minAlphabetSize || len(alphabet) > maxAlphabetSize {
+			t.Skip()
+		}
+
+		// Guard: cap extreme lengths to avoid resource exhaustion
+		if length > 10000 || length < -10000 {
+			t.Skip()
+		}
+
+		// Create generator
+		nano, err := NewNanoID(alphabet)
+		if err != nil {
+			// Expected for invalid UTF-8, too short/long alphabet
+			// Fuzz test validates error handling
+			t.Skip()
+		}
+
+		// Generate ID
+		id, err := nano.Generate(length)
+		if err != nil {
+			t.Fatalf("Generate(length=%d) error: %v", length, err)
+		}
+
+		// Invariant 1: ID is non-empty
+		if id == "" {
+			t.Fatal("Generate() returned empty string")
+		}
+
+		// Invariant 2: ID length matches specification
+		expectedLen := defaultSize
+		if length > 0 {
+			expectedLen = length
+		}
+
+		if len(id) != expectedLen {
+			t.Errorf("Generate(length=%d) returned len=%d, want %d", length, len(id), expectedLen)
+		}
+
+		// Invariant 3: All characters are from alphabet
+		for i, ch := range id {
+			if !strings.ContainsRune(alphabet, ch) {
+				t.Errorf("Generate() position %d: char %q not in alphabet (len=%d)", i, ch, len(alphabet))
+			}
+		}
+	})
+}

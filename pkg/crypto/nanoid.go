@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"math"
+	"unicode/utf8"
 )
 
 const (
@@ -17,6 +18,8 @@ var (
 	ErrTooManyInputAlphabet = errors.New("must only provide 1 set of alphabet")
 	ErrAlphabetTooLong      = errors.New("alphabet must contain no more than 255 characters")
 	ErrAlphabetTooShort     = errors.New("alphabet must contain at least 8 characters")
+	ErrAlphabetInvalidUTF8  = errors.New("alphabet must contain valid UTF-8")
+	ErrAlphabetNotASCII     = errors.New("alphabet must contain only ASCII characters")
 )
 
 type NanoIDGenerator struct {
@@ -42,6 +45,18 @@ func NewNanoID(a ...string) (*NanoIDGenerator, error) {
 	alphabet := defaultAlphabet
 	if !(len(a) == 0 || a[0] == "") {
 		alphabet = a[0]
+	}
+
+	if !utf8.ValidString(alphabet) {
+		return nil, ErrAlphabetInvalidUTF8
+	}
+
+	// Verify all characters are ASCII (single-byte UTF-8)
+	// This is required because Generate() indexes by byte position
+	for _, r := range alphabet {
+		if r > 127 {
+			return nil, ErrAlphabetNotASCII
+		}
 	}
 
 	if len(alphabet) > maxAlphabetSize {
