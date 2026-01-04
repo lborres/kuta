@@ -30,8 +30,8 @@ func (a *Adapter) DeleteSessionByHash(tokenHash string) error {
 	return kuta.ErrNotImplemented
 }
 
-func (a *Adapter) DeleteUserSessions(userID string) error {
-	return kuta.ErrNotImplemented
+func (a *Adapter) DeleteUserSessions(userID string) (int, error) {
+	return 200, kuta.ErrNotImplemented
 }
 
 func (a *Adapter) DeleteExpiredSessions() (int, error) {
