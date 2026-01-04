@@ -345,3 +345,48 @@ func TestArgon2_Concurrent(t *testing.T) {
 		}
 	}
 }
+
+func FuzzArgon2_Hash(f *testing.F) {
+	// Seed corpus with various password types
+	f.Add("")                       // empty password
+	f.Add("test")                   // simple password
+	f.Add("testPassword123")        // alphanumeric
+	f.Add("p@ssw0rd!#$%")           // special characters
+	f.Add(strings.Repeat("a", 128)) // long password
+	f.Add("パスワード🔐")                 // unicode
+	f.Add("pass\x00word")           // null byte
+	f.Add("\n\r\t")                 // whitespace
+	f.Add("a\x00b\x00c")            // multiple nulls
+
+	f.Fuzz(func(t *testing.T, password string) {
+		// Arrange
+		a := NewArgon2()
+
+		// Act: Hash should never panic and always succeed
+		hash, err := a.Hash(password)
+
+		// Assert: Hash must succeed
+		if err != nil {
+			t.Fatalf("Hash() error = %v", err)
+		}
+
+		// Invariant 1: Hash is non-empty
+		if hash == "" {
+			t.Fatal("Hash() returned empty string")
+		}
+
+		// Invariant 2: Hash has correct Argon2id format
+		if !strings.HasPrefix(hash, "$argon2id$") {
+			t.Errorf("Hash() should start with $argon2id$, got: %q", hash[:20])
+		}
+
+		// Invariant 3: Verify the hash with correct password succeeds
+		ok, err := a.Verify(password, hash)
+		if err != nil {
+			t.Fatalf("Verify() error = %v", err)
+		}
+		if !ok {
+			t.Fatal("Verify() should return true for correct password")
+		}
+	})
+}

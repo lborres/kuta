@@ -9,6 +9,10 @@ import (
 	"errors"
 )
 
+var (
+	ErrTooManyArgs = errors.New("too many arguments. expected only 1")
+)
+
 const (
 	DefaultTokenLength = 32 // 256 bits
 )
@@ -32,12 +36,18 @@ func generateToken(byteLength int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(bytes), nil
 }
 
-func GenerateHashedToken(byteLength int) (*TokenPair, error) {
-	if byteLength <= 0 {
-		byteLength = DefaultTokenLength
+func GenerateHashedToken(byteLength ...int) (*TokenPair, error) {
+	if len(byteLength) > 1 {
+		return nil, ErrTooManyArgs
 	}
 
-	token, err := generateToken(byteLength)
+	length := DefaultTokenLength
+
+	if len(byteLength) > 0 && byteLength[0] > 0 {
+		length = byteLength[0]
+	}
+
+	token, err := generateToken(length)
 	if err != nil {
 		return nil, err
 	}

@@ -311,3 +311,135 @@ func TestVerifyToken_Consistency(t *testing.T) {
 		}
 	}
 }
+
+// Requirement: GenerateHashedToken returns an error when called with more than one argument.
+func TestGenerateHashedToken_InvalidArgCount(t *testing.T) {
+	_, err := GenerateHashedToken(16, 32)
+	if err == nil {
+		t.Fatal("expected error when passing multiple byteLength args")
+	}
+	if err != ErrTooManyArgs {
+		t.Fatalf("expected ErrTooManyArgs; got %v", err)
+	}
+}
+
+func FuzzGenerateHashedToken(f *testing.F) {
+	// Seed corpus with various byte lengths
+	f.Add(0)   // zero uses default
+	f.Add(-1)  // negative uses default
+	f.Add(1)   // minimum
+	f.Add(16)  // common length
+	f.Add(32)  // default length
+	f.Add(64)  // larger
+	f.Add(128) // large
+	f.Add(255) // max practical
+
+	f.Fuzz(func(t *testing.T, byteLength int) {
+		// Guard: cap extreme lengths to avoid resource exhaustion
+		if byteLength > 10000 || byteLength < -10000 {
+			t.Skip()
+		}
+
+		// Act: GenerateHashedToken should never panic
+		pair, err := GenerateHashedToken(byteLength)
+
+		// Assert: should succeed
+		if err != nil {
+			t.Fatalf("GenerateHashedToken(length=%d) error = %v", byteLength, err)
+		}
+
+		// Invariant 1: returns non-nil pair
+		if pair == nil {
+			t.Fatal("GenerateHashedToken() returned nil")
+		}
+
+		// Invariant 2: token is non-empty
+		if pair.Token == "" {
+			t.Fatal("GenerateHashedToken() token is empty")
+		}
+
+		// Invariant 3: hash is non-empty and valid hex
+		if pair.Hash == "" {
+			t.Fatal("GenerateHashedToken() hash is empty")
+		}
+		if len(pair.Hash) != 64 {
+			t.Errorf("hash length = %d, want 64 (SHA256 hex)", len(pair.Hash))
+		}
+		if _, err := hex.DecodeString(pair.Hash); err != nil {
+			t.Errorf("hash is not valid hex: %v", err)
+		}
+
+		// Invariant 4: token is valid base64.RawURLEncoding
+		decoded, err := base64.RawURLEncoding.DecodeString(pair.Token)
+		if err != nil {
+			t.Errorf("token is not valid base64.RawURLEncoding: %v", err)
+		}
+
+		// Invariant 5: token and hash differ
+		if pair.Token == pair.Hash {
+			t.Error("token and hash should differ")
+		}
+
+		// Invariant 6: VerifyToken succeeds with correct pair
+		ok, err := VerifyToken(pair.Token, pair.Hash)
+		if err != nil {
+			t.Fatalf("VerifyToken() error = %v", err)
+		}
+		if !ok {
+			t.Error("VerifyToken() should verify correct token/hash pair")
+		}
+
+		// Invariant 7: token has expected byte length
+		expectedLen := DefaultTokenLength
+		if byteLength > 0 {
+			expectedLen = byteLength
+		}
+		if len(decoded) != expectedLen {
+			t.Errorf("decoded token length = %d bytes, want %d", len(decoded), expectedLen)
+		}
+	})
+}
+
+func FuzzVerifyToken(f *testing.F) {
+	// Seed corpus with valid and invalid token/hash pairs
+	f.Add("", "")                                                                     // both empty
+	f.Add("token", "")                                                                // empty hash
+	f.Add("", "hash")                                                                 // empty token
+	f.Add("valid_token", "valid_hash")                                                // both non-empty but wrong
+	f.Add("test", "9f86d081884c7d6d9ffd60014fc7ee77e0bd20e9e4e9c08e4f50ba5f5f0f4e91") // "test" correct hash
+
+	f.Fuzz(func(t *testing.T, token string, hash string) {
+		// Act: VerifyToken should never panic
+		ok, err := VerifyToken(token, hash)
+
+		// Assert: check error behavior for empty inputs
+		if token == "" || hash == "" {
+			// Should return error for empty inputs
+			if err == nil {
+				t.Fatal("VerifyToken() should return error for empty token or hash")
+			}
+			return
+		}
+
+		// For non-empty inputs, should not panic
+		// Result depends on whether hash matches token, which is random
+
+		// Invariant 1: either ok or !ok, never panic
+		_ = ok
+
+		// Invariant 2: Verify returns bool and optional error
+		if err != nil {
+			// Only expect error for empty inputs (checked above)
+			t.Errorf("VerifyToken(token=%q, hash=%q) error = %v", token, hash, err)
+		}
+
+		// Invariant 3: Consistent verification (same inputs = same output)
+		ok2, err2 := VerifyToken(token, hash)
+		if ok != ok2 {
+			t.Errorf("VerifyToken() inconsistent results: %v vs %v", ok, ok2)
+		}
+		if (err == nil) != (err2 == nil) {
+			t.Errorf("VerifyToken() inconsistent errors: %v vs %v", err, err2)
+		}
+	})
+}
