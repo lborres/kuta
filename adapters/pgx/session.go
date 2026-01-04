@@ -11,8 +11,8 @@ import (
 func (a *Adapter) CreateSession(session *kuta.Session) error {
 	ctx := context.Background()
 
-	query := `INSERT INTO public.sessions (id, user_id, token_hash, ip_address, user_agent, expires_at) 
-	          VALUES ($1, $2, $3, $4, $5, $6) 
+	query := `INSERT INTO public.sessions (id, user_id, token_hash, ip_address, user_agent, expires_at)
+	          VALUES ($1, $2, $3, $4, $5, $6)
 	          RETURNING created_at, updated_at`
 
 	var createdAt, updatedAt time.Time
@@ -31,7 +31,7 @@ func (a *Adapter) CreateSession(session *kuta.Session) error {
 
 func (a *Adapter) GetSessionByHash(tokenHash string) (*kuta.Session, error) {
 	ctx := context.Background()
-	query := `SELECT id, user_id, token_hash, ip_address, user_agent, expires_at, created_at, updated_at 
+	query := `SELECT id, user_id, token_hash, ip_address, user_agent, expires_at, created_at, updated_at
 	          FROM public.sessions WHERE token_hash = $1`
 
 	session := &kuta.Session{}
@@ -51,7 +51,7 @@ func (a *Adapter) GetSessionByHash(tokenHash string) (*kuta.Session, error) {
 
 func (a *Adapter) GetSessionByID(id string) (*kuta.Session, error) {
 	ctx := context.Background()
-	query := `SELECT id, user_id, token_hash, ip_address, user_agent, expires_at, created_at, updated_at 
+	query := `SELECT id, user_id, token_hash, ip_address, user_agent, expires_at, created_at, updated_at
 	          FROM public.sessions WHERE id = $1`
 
 	session := &kuta.Session{}
@@ -71,7 +71,7 @@ func (a *Adapter) GetSessionByID(id string) (*kuta.Session, error) {
 
 func (a *Adapter) GetUserSessions(userID string) ([]*kuta.Session, error) {
 	ctx := context.Background()
-	query := `SELECT id, user_id, token_hash, ip_address, user_agent, expires_at, created_at, updated_at 
+	query := `SELECT id, user_id, token_hash, ip_address, user_agent, expires_at, created_at, updated_at
 	          FROM public.sessions WHERE user_id = $1 ORDER BY created_at DESC`
 
 	rows, err := a.pool.Query(ctx, query, userID)
@@ -101,7 +101,7 @@ func (a *Adapter) GetUserSessions(userID string) ([]*kuta.Session, error) {
 
 func (a *Adapter) UpdateSession(session *kuta.Session) error {
 	ctx := context.Background()
-	query := `UPDATE public.sessions SET token_hash = $1, ip_address = $2, user_agent = $3, expires_at = $4, updated_at = now() 
+	query := `UPDATE public.sessions SET token_hash = $1, ip_address = $2, user_agent = $3, expires_at = $4, updated_at = now()
 	          WHERE id = $5 RETURNING updated_at`
 
 	var updatedAt time.Time

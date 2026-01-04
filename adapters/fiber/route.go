@@ -37,7 +37,7 @@ func (a *Adapter) RegisterRoutes(service kuta.AuthProvider, basePath string, _ t
 			endpoints[i].Handler = handleSignOutFiber(service)
 		case "getSession":
 			endpoints[i].Handler = handleGetSessionFiber(service)
-		case "refresh":
+		case "refreshToken":
 			endpoints[i].Handler = handleRefreshFiber(service)
 		}
 	}

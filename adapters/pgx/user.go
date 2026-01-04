@@ -11,11 +11,11 @@ import (
 func (a *Adapter) CreateUser(user *kuta.User) error {
 	ctx := context.Background()
 
-	query := `INSERT INTO public.users (email, email_verified, name, image) VALUES ($1, $2, $3, $4) RETURNING id, created_at, updated_at`
+	query := `INSERT INTO public.users (id, email, email_verified, name, image) VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at, updated_at`
 	var id string
 	var createdAt, updatedAt time.Time
 
-	err := a.pool.QueryRow(ctx, query, user.Email, user.EmailVerified, user.Name, user.Image).Scan(&id, &createdAt, &updatedAt)
+	err := a.pool.QueryRow(ctx, query, user.ID, user.Email, user.EmailVerified, user.Name, user.Image).Scan(&id, &createdAt, &updatedAt)
 	if err != nil {
 		return err
 	}

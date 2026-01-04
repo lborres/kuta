@@ -32,8 +32,11 @@ func logFormat() string {
 		// Request details
 		"${method}|${path}|${queryParams}",
 
-		// Request body & errors
-		"${body}|${error}",
+		// Request body
+		// "${body}",
+
+		// errors
+		"${errors}",
 	}
 	return strings.Join(format, "|") + "\n"
 }
