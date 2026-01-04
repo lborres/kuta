@@ -152,13 +152,9 @@ func New(config Config) (*Kuta, error) {
 		basePath = defaultBasePath
 	}
 
-	// Create session service
-	sessionService := services.NewSessionManager(*sessionConfig, config.Database, cacheProvider)
+	sessionService := services.NewSessionManager(*sessionConfig, config.Database, cacheProvider, passwordHandler)
 
-	// Create auth service
-	authService := services.NewAuthService(config.Database, sessionService, passwordHandler)
-
-	if err := config.HTTP.RegisterRoutes(authService, basePath, sessionConfig.MaxAge); err != nil {
+	if err := config.HTTP.RegisterRoutes(sessionService, basePath, sessionConfig.MaxAge); err != nil {
 		return nil, err
 	}
 

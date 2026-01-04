@@ -11,6 +11,13 @@ import (
 	"github.com/lborres/kuta/pkg/crypto"
 )
 
+// Helper function to create a SessionManager for tests
+func newTestSessionManager(storage core.StorageProvider, cache core.Cache) *SessionManager {
+	config := core.SessionConfig{MaxAge: 24 * time.Hour}
+	passwords := crypto.NewArgon2()
+	return NewSessionManager(config, storage, cache, passwords)
+}
+
 // Requirement: Create generates a new session with a token.
 func TestSessionManager_Create(t *testing.T) {
 	tests := []struct {
@@ -29,9 +36,8 @@ func TestSessionManager_Create(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
-			storage := NewFakeSessionStorage()
-			config := core.SessionConfig{MaxAge: 24 * time.Hour}
-			manager := NewSessionManager(config, storage, nil)
+			storage := NewFakeStorageProvider()
+			manager := newTestSessionManager(storage, nil)
 
 			// Act
 			result, err := manager.Create(test.userID, test.ip, test.userAgent)
@@ -104,9 +110,10 @@ func TestSessionManager_Create_TokenHashNotExposed(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
-			storage := NewFakeSessionStorage()
+			storage := NewFakeStorageProvider()
 			config := core.SessionConfig{MaxAge: 24 * time.Hour}
-			manager := NewSessionManager(config, storage, nil)
+			passwords := crypto.NewArgon2()
+			manager := NewSessionManager(config, storage, nil, passwords)
 
 			// Act
 			result, err := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
@@ -138,14 +145,14 @@ func TestSessionManager_Create_TokenHashNotExposed(t *testing.T) {
 func TestSessionManager_Verify(t *testing.T) {
 	tests := []struct {
 		name         string
-		setupSession func(*FakeSessionStorage) string // returns token to use
+		setupSession func(*FakeStorageProvider) string // returns token to use
 		wantErr      bool
 		wantSession  bool
 	}{
 		{
 			name: "returns session for valid token",
-			setupSession: func(storage *FakeSessionStorage) string {
-				manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			setupSession: func(storage *FakeStorageProvider) string {
+				manager := newTestSessionManager(storage, nil)
 				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 				return result.Token
 			},
@@ -154,7 +161,7 @@ func TestSessionManager_Verify(t *testing.T) {
 		},
 		{
 			name: "returns error for empty token",
-			setupSession: func(storage *FakeSessionStorage) string {
+			setupSession: func(storage *FakeStorageProvider) string {
 				return ""
 			},
 			wantErr:     true,
@@ -162,8 +169,8 @@ func TestSessionManager_Verify(t *testing.T) {
 		},
 		{
 			name: "returns error for invalid token",
-			setupSession: func(storage *FakeSessionStorage) string {
-				manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			setupSession: func(storage *FakeStorageProvider) string {
+				manager := newTestSessionManager(storage, nil)
 				manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 				return "invalid_token_xyz"
 			},
@@ -172,8 +179,10 @@ func TestSessionManager_Verify(t *testing.T) {
 		},
 		{
 			name: "returns error for expired session",
-			setupSession: func(storage *FakeSessionStorage) string {
-				manager := NewSessionManager(core.SessionConfig{MaxAge: -1 * time.Hour}, storage, nil)
+			setupSession: func(storage *FakeStorageProvider) string {
+				config := core.SessionConfig{MaxAge: -1 * time.Hour}
+				passwords := crypto.NewArgon2()
+				manager := NewSessionManager(config, storage, nil, passwords)
 				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 				return result.Token
 			},
@@ -182,8 +191,8 @@ func TestSessionManager_Verify(t *testing.T) {
 		},
 		{
 			name: "returns error when token not found in storage",
-			setupSession: func(storage *FakeSessionStorage) string {
-				manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			setupSession: func(storage *FakeStorageProvider) string {
+				manager := newTestSessionManager(storage, nil)
 				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 				storage.DeleteSessionByID(result.Session.ID) // delete it
 				return result.Token
@@ -197,9 +206,9 @@ func TestSessionManager_Verify(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
-			storage := NewFakeSessionStorage()
+			storage := NewFakeStorageProvider()
 			token := test.setupSession(storage)
-			manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			manager := newTestSessionManager(storage, nil)
 
 			// Act
 			session, err := manager.Verify(token)
@@ -227,13 +236,13 @@ func TestSessionManager_Verify(t *testing.T) {
 func TestSessionManager_Destroy(t *testing.T) {
 	tests := []struct {
 		name         string
-		setupSession func(*FakeSessionStorage) string // returns token to destroy
+		setupSession func(*FakeStorageProvider) string // returns token to destroy
 		wantErr      bool
 	}{
 		{
 			name: "successfully destroys session by token",
-			setupSession: func(storage *FakeSessionStorage) string {
-				manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			setupSession: func(storage *FakeStorageProvider) string {
+				manager := newTestSessionManager(storage, nil)
 				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 				return result.Token
 			},
@@ -241,22 +250,22 @@ func TestSessionManager_Destroy(t *testing.T) {
 		},
 		{
 			name: "returns error for empty token",
-			setupSession: func(storage *FakeSessionStorage) string {
+			setupSession: func(storage *FakeStorageProvider) string {
 				return ""
 			},
 			wantErr: true,
 		},
 		{
 			name: "returns error for invalid token",
-			setupSession: func(storage *FakeSessionStorage) string {
+			setupSession: func(storage *FakeStorageProvider) string {
 				return "invalid_token_xyz"
 			},
 			wantErr: true,
 		},
 		{
 			name: "prevents session use after destruction",
-			setupSession: func(storage *FakeSessionStorage) string {
-				manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			setupSession: func(storage *FakeStorageProvider) string {
+				manager := newTestSessionManager(storage, nil)
 				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 				return result.Token
 			},
@@ -268,8 +277,8 @@ func TestSessionManager_Destroy(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
-			storage := NewFakeSessionStorage()
-			manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			storage := NewFakeStorageProvider()
+			manager := newTestSessionManager(storage, nil)
 			token := test.setupSession(storage)
 
 			// Act
@@ -295,13 +304,13 @@ func TestSessionManager_Destroy(t *testing.T) {
 func TestSessionManager_DestroyBySessionID(t *testing.T) {
 	tests := []struct {
 		name         string
-		setupSession func(*FakeSessionStorage) string // returns sessionID to destroy
+		setupSession func(*FakeStorageProvider) string // returns sessionID to destroy
 		wantErr      bool
 	}{
 		{
 			name: "successfully destroys session by ID",
-			setupSession: func(storage *FakeSessionStorage) string {
-				manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			setupSession: func(storage *FakeStorageProvider) string {
+				manager := newTestSessionManager(storage, nil)
 				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 				return result.Session.ID
 			},
@@ -309,14 +318,14 @@ func TestSessionManager_DestroyBySessionID(t *testing.T) {
 		},
 		{
 			name: "returns error for empty session ID",
-			setupSession: func(storage *FakeSessionStorage) string {
+			setupSession: func(storage *FakeStorageProvider) string {
 				return ""
 			},
 			wantErr: true,
 		},
 		{
 			name: "returns error for nonexistent session ID",
-			setupSession: func(storage *FakeSessionStorage) string {
+			setupSession: func(storage *FakeStorageProvider) string {
 				return "nonexistent_session_id"
 			},
 			wantErr: true,
@@ -327,8 +336,8 @@ func TestSessionManager_DestroyBySessionID(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
-			storage := NewFakeSessionStorage()
-			manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			storage := NewFakeStorageProvider()
+			manager := newTestSessionManager(storage, nil)
 			sessionID := test.setupSession(storage)
 
 			// Act
@@ -347,15 +356,15 @@ func TestSessionManager_DestroyAllUserSessions(t *testing.T) {
 	tests := []struct {
 		name          string
 		userID        string
-		setupSessions func(*FakeSessionStorage) int // creates sessions, returns count
+		setupSessions func(*FakeStorageProvider) int // creates sessions, returns count
 		wantErr       bool
 		wantDestroyed int
 	}{
 		{
 			name:   "destroys all sessions for user",
 			userID: "user123",
-			setupSessions: func(storage *FakeSessionStorage) int {
-				manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			setupSessions: func(storage *FakeStorageProvider) int {
+				manager := newTestSessionManager(storage, nil)
 				manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 				manager.Create("user123", "192.168.1.2", "Chrome/5.0")
 				manager.Create("user123", "192.168.1.3", "Safari/5.0")
@@ -367,7 +376,7 @@ func TestSessionManager_DestroyAllUserSessions(t *testing.T) {
 		{
 			name:   "returns zero for user with no sessions",
 			userID: "nonexistent_user",
-			setupSessions: func(storage *FakeSessionStorage) int {
+			setupSessions: func(storage *FakeStorageProvider) int {
 				return 0
 			},
 			wantErr:       false,
@@ -376,7 +385,7 @@ func TestSessionManager_DestroyAllUserSessions(t *testing.T) {
 		{
 			name:   "returns error for empty userID",
 			userID: "",
-			setupSessions: func(storage *FakeSessionStorage) int {
+			setupSessions: func(storage *FakeStorageProvider) int {
 				return 0
 			},
 			wantErr:       true,
@@ -385,8 +394,8 @@ func TestSessionManager_DestroyAllUserSessions(t *testing.T) {
 		{
 			name:   "only destroys specified user's sessions",
 			userID: "user123",
-			setupSessions: func(storage *FakeSessionStorage) int {
-				manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			setupSessions: func(storage *FakeStorageProvider) int {
+				manager := newTestSessionManager(storage, nil)
 				manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 				manager.Create("user123", "192.168.1.2", "Chrome/5.0")
 				manager.Create("user456", "192.168.1.3", "Safari/5.0")
@@ -401,8 +410,8 @@ func TestSessionManager_DestroyAllUserSessions(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
-			storage := NewFakeSessionStorage()
-			manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			storage := NewFakeStorageProvider()
+			manager := newTestSessionManager(storage, nil)
 			_ = test.setupSessions(storage)
 
 			// Act
@@ -452,9 +461,10 @@ func TestSessionManager_Create_CacheBehavior(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
-			storage := NewFakeSessionStorage()
+			storage := NewFakeStorageProvider()
 			config := core.SessionConfig{MaxAge: 24 * time.Hour}
-			manager := NewSessionManager(config, storage, test.cache)
+			passwords := crypto.NewArgon2()
+			manager := NewSessionManager(config, storage, test.cache, passwords)
 			result, err := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 
 			// Assert
@@ -522,10 +532,11 @@ func TestSessionManager_Verify_CachePattern(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
-			storage := NewFakeSessionStorage()
+			storage := NewFakeStorageProvider()
 			cache := test.setupCache()
 			config := core.SessionConfig{MaxAge: 24 * time.Hour}
-			manager := NewSessionManager(config, storage, cache)
+			passwords := crypto.NewArgon2()
+			manager := NewSessionManager(config, storage, cache, passwords)
 
 			result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 			token := result.Token
@@ -585,13 +596,14 @@ func TestSessionManager_Verify_ExpiredSessionHandling(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
-			storage := NewFakeSessionStorage()
+			storage := NewFakeStorageProvider()
 			var cache core.Cache
 			if test.withCache {
 				cache = NewFakeCache()
 			}
 			config := core.SessionConfig{MaxAge: -1 * time.Hour} // Already expired
-			manager := NewSessionManager(config, storage, cache)
+			passwords := crypto.NewArgon2()
+			manager := NewSessionManager(config, storage, cache, passwords)
 
 			result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 			token := result.Token
@@ -641,13 +653,14 @@ func TestSessionManager_Destroy_CacheInvalidation(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
-			storage := NewFakeSessionStorage()
+			storage := NewFakeStorageProvider()
 			var cache core.Cache
 			if test.withCache {
 				cache = NewFakeCache()
 			}
 			config := core.SessionConfig{MaxAge: 24 * time.Hour}
-			manager := NewSessionManager(config, storage, cache)
+			passwords := crypto.NewArgon2()
+			manager := NewSessionManager(config, storage, cache, passwords)
 
 			result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 			token := result.Token
@@ -698,13 +711,14 @@ func TestSessionManager_DestroyBySessionID_CacheInvalidation(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
-			storage := NewFakeSessionStorage()
+			storage := NewFakeStorageProvider()
 			var cache core.Cache
 			if test.withCache {
 				cache = NewFakeCache()
 			}
 			config := core.SessionConfig{MaxAge: 24 * time.Hour}
-			manager := NewSessionManager(config, storage, cache)
+			passwords := crypto.NewArgon2()
+			manager := NewSessionManager(config, storage, cache, passwords)
 
 			result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 			sessionID := result.Session.ID
@@ -758,13 +772,14 @@ func TestSessionManager_DestroyAllUserSessions_CacheClearing(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
-			storage := NewFakeSessionStorage()
+			storage := NewFakeStorageProvider()
 			var cache core.Cache
 			if test.withCache {
 				cache = NewFakeCache()
 			}
 			config := core.SessionConfig{MaxAge: 24 * time.Hour}
-			manager := NewSessionManager(config, storage, cache)
+			passwords := crypto.NewArgon2()
+			manager := NewSessionManager(config, storage, cache, passwords)
 
 			// Create multiple sessions
 			for i := 0; i < test.sessionCount; i++ {
@@ -794,6 +809,613 @@ func TestSessionManager_DestroyAllUserSessions_CacheClearing(t *testing.T) {
 				fakeCache, ok := cache.(*FakeCache)
 				if ok && fakeCache.Len() != 0 {
 					t.Errorf("Cache should be cleared, but has %d entries", fakeCache.Len())
+				}
+			}
+		})
+	}
+}
+
+// Requirement: Refresh extends a session's expiry time and returns a new token.
+// The old token becomes invalid immediately.
+func TestSessionManager_Refresh(t *testing.T) {
+	tests := []struct {
+		name      string
+		setupAuth func(*FakeStorageProvider, crypto.PasswordHandler) string // returns token to refresh
+		wantErr   bool
+		wantToken bool
+	}{
+		{
+			name: "successfully refreshes valid token",
+			setupAuth: func(storage *FakeStorageProvider, passwords crypto.PasswordHandler) string {
+				user := &core.User{ID: "user-alice", Email: "alice@example.com"}
+				_ = storage.CreateUser(user)
+				hashedPassword, _ := passwords.Hash("SecurePass123!")
+				account := &core.Account{
+					ID:         "account-alice",
+					UserID:     "user-alice",
+					ProviderID: "credential",
+					AccountID:  "alice@example.com",
+					Password:   &hashedPassword,
+				}
+				_ = storage.CreateAccount(account)
+
+				config := core.SessionConfig{MaxAge: 24 * time.Hour}
+				service := NewSessionManager(config, storage, nil, passwords)
+				result, _ := service.SignIn(core.SignInInput{
+					Email:    "alice@example.com",
+					Password: "SecurePass123!",
+				}, "127.0.0.1", "test-agent")
+				return result.Token
+			},
+			wantErr:   false,
+			wantToken: true,
+		},
+		{
+			name: "returns error for empty token",
+			setupAuth: func(storage *FakeStorageProvider, passwords crypto.PasswordHandler) string {
+				return ""
+			},
+			wantErr:   true,
+			wantToken: false,
+		},
+		{
+			name: "returns error for invalid token",
+			setupAuth: func(storage *FakeStorageProvider, passwords crypto.PasswordHandler) string {
+				return "invalid_token_xyz"
+			},
+			wantErr:   true,
+			wantToken: false,
+		},
+		{
+			name: "returns error for expired session",
+			setupAuth: func(storage *FakeStorageProvider, passwords crypto.PasswordHandler) string {
+				user := &core.User{ID: "user-charlie", Email: "charlie@example.com"}
+				_ = storage.CreateUser(user)
+				hashedPassword, _ := passwords.Hash("SecurePass123!")
+				account := &core.Account{
+					ID:         "account-charlie",
+					UserID:     "user-charlie",
+					ProviderID: "credential",
+					AccountID:  "charlie@example.com",
+					Password:   &hashedPassword,
+				}
+				_ = storage.CreateAccount(account)
+
+				// Create with expired session config
+				config := core.SessionConfig{MaxAge: -1 * time.Hour}
+				service := NewSessionManager(config, storage, nil, passwords)
+				result, _ := service.SignIn(core.SignInInput{
+					Email:    "charlie@example.com",
+					Password: "SecurePass123!",
+				}, "127.0.0.1", "test-agent")
+				return result.Token
+			},
+			wantErr:   true,
+			wantToken: false,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
+			storage := NewFakeStorageProvider()
+			passwords := crypto.NewArgon2()
+			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			service := NewSessionManager(config, storage, nil, passwords)
+
+			token := test.setupAuth(storage, passwords)
+
+			// Act
+			result, err := service.Refresh(token)
+
+			// Assert
+			if (err != nil) != test.wantErr {
+				t.Fatalf("Refresh() error = %v, wantErr %v", err, test.wantErr)
+			}
+			if test.wantToken && result != nil && result.Token == "" {
+				t.Error("Refresh() should return token")
+			}
+			if !test.wantErr && result != nil {
+				if result.Session == nil {
+					t.Error("Refresh() should return session")
+				}
+				// Verify new token is different from old token
+				if result.Token == token {
+					t.Error("Refresh() should return a new token, not the old one")
+				}
+				// Verify old token can't be used anymore
+				_, err := service.Verify(token)
+				if err == nil {
+					t.Error("Old token should be invalid after refresh")
+				}
+			}
+		})
+	}
+}
+
+// Requirement: Refresh invalidates old token in cache and caches new session.
+func TestSessionManager_Refresh_CacheBehavior(t *testing.T) {
+	tests := []struct {
+		name      string
+		withCache bool
+	}{
+		{
+			name:      "invalidates old token and caches new session",
+			withCache: true,
+		},
+		{
+			name:      "works without cache",
+			withCache: false,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
+			storage := NewFakeStorageProvider()
+			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			var cache core.Cache
+			if test.withCache {
+				cache = NewFakeCache()
+			}
+			passwords := crypto.NewArgon2()
+			service := NewSessionManager(config, storage, cache, passwords)
+
+			// Create initial session
+			result, err := service.Create("user123", "192.168.1.1", "Mozilla/5.0")
+			if err != nil {
+				t.Fatalf("Create() failed: %v", err)
+			}
+			oldToken := result.Token
+
+			// Warm cache by verifying the session
+			if test.withCache {
+				service.Verify(oldToken)
+			}
+
+			// Act: Refresh the token
+			refreshResult, err := service.Refresh(oldToken)
+			if err != nil {
+				t.Fatalf("Refresh() failed: %v", err)
+			}
+
+			// Assert
+			if refreshResult.Token == "" {
+				t.Fatal("Refresh() should return a new token")
+			}
+
+			// Verify old token is completely removed
+			_, err = service.Verify(oldToken)
+			if err == nil {
+				t.Error("Old token should be invalid after refresh")
+			}
+
+			// Verify new token works
+			newSession, err := service.Verify(refreshResult.Token)
+			if err != nil {
+				t.Fatalf("New token should be valid: %v", err)
+			}
+			if newSession.UserID != "user123" {
+				t.Errorf("New session has wrong user: got %q, want %q", newSession.UserID, "user123")
+			}
+
+			// Verify new session has extended expiry
+			if !newSession.ExpiresAt.After(result.Session.ExpiresAt) {
+				t.Error("Refreshed session should have extended expiry")
+			}
+		})
+	}
+}
+
+// Requirement: SignUp creates a new user account and returns a result with user and session.
+func TestSessionManager_SignUp(t *testing.T) {
+	tests := []struct {
+		name      string
+		email     string
+		password  string
+		setup     func(*FakeStorageProvider) // optional setup before SignUp
+		wantErr   bool
+		wantUser  bool
+		wantToken bool
+	}{
+		{
+			name:      "creates user and session for valid input",
+			email:     "alice@example.com",
+			password:  "SecurePass123!",
+			wantErr:   false,
+			wantUser:  true,
+			wantToken: true,
+		},
+		{
+			name:     "returns error for empty email",
+			email:    "",
+			password: "SecurePass123!",
+			wantErr:  true,
+		},
+		{
+			name:     "returns error for empty password",
+			email:    "alice@example.com",
+			password: "",
+			wantErr:  true,
+		},
+		{
+			name:     "returns error for duplicate email",
+			email:    "alice@example.com",
+			password: "SecurePass123!",
+			setup: func(storage *FakeStorageProvider) {
+				// Create a user with this email first
+				_ = storage.CreateUser(&core.User{
+					ID:    "existing-user",
+					Email: "alice@example.com",
+				})
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
+			storage := NewFakeStorageProvider()
+			if test.setup != nil {
+				test.setup(storage)
+			}
+			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			passwords := crypto.NewArgon2()
+			service := NewSessionManager(config, storage, nil, passwords)
+
+			// Act
+			result, err := service.SignUp(core.SignUpInput{
+				Email:    test.email,
+				Password: test.password,
+			}, "127.0.0.1", "test-agent")
+
+			// Assert
+			if (err != nil) != test.wantErr {
+				t.Fatalf("SignUp() error = %v, wantErr %v", err, test.wantErr)
+			}
+			if test.wantUser && result != nil && result.User == nil {
+				t.Error("SignUp() should return user")
+			}
+			if test.wantToken && result != nil && result.Token == "" {
+				t.Error("SignUp() should return token")
+			}
+		})
+	}
+}
+
+// Requirement: SignIn authenticates a user by email and password, creates a session, and returns user + token.
+func TestSessionManager_SignIn(t *testing.T) {
+	tests := []struct {
+		name      string
+		email     string
+		password  string
+		setup     func(*FakeStorageProvider, crypto.PasswordHandler) // setup user + account before SignIn
+		wantErr   bool
+		wantUser  bool
+		wantToken bool
+	}{
+		{
+			name:     "signs in user with valid credentials",
+			email:    "alice@example.com",
+			password: "SecurePass123!",
+			setup: func(storage *FakeStorageProvider, passwords crypto.PasswordHandler) {
+				// Create user
+				user := &core.User{
+					ID:    "user-alice",
+					Email: "alice@example.com",
+				}
+				_ = storage.CreateUser(user)
+				// Create account with hashed password
+				hashedPassword, _ := passwords.Hash("SecurePass123!")
+				account := &core.Account{
+					ID:         "account-alice",
+					UserID:     "user-alice",
+					ProviderID: "credential",
+					AccountID:  "alice@example.com",
+					Password:   &hashedPassword,
+				}
+				_ = storage.CreateAccount(account)
+			},
+			wantErr:   false,
+			wantUser:  true,
+			wantToken: true,
+		},
+		{
+			name:     "returns error for empty email",
+			email:    "",
+			password: "SecurePass123!",
+			wantErr:  true,
+		},
+		{
+			name:     "returns error for empty password",
+			email:    "alice@example.com",
+			password: "",
+			wantErr:  true,
+		},
+		{
+			name:     "returns error for user not found",
+			email:    "nonexistent@example.com",
+			password: "SecurePass123!",
+			wantErr:  true,
+		},
+		{
+			name:     "returns error for wrong password",
+			email:    "alice@example.com",
+			password: "WrongPassword123!",
+			setup: func(storage *FakeStorageProvider, passwords crypto.PasswordHandler) {
+				// Create user
+				user := &core.User{
+					ID:    "user-alice",
+					Email: "alice@example.com",
+				}
+				_ = storage.CreateUser(user)
+				// Create account with correct hashed password
+				hashedPassword, _ := passwords.Hash("CorrectPassword123!")
+				account := &core.Account{
+					ID:         "account-alice",
+					UserID:     "user-alice",
+					ProviderID: "credential",
+					AccountID:  "alice@example.com",
+					Password:   &hashedPassword,
+				}
+				_ = storage.CreateAccount(account)
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
+			storage := NewFakeStorageProvider()
+			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			passwords := crypto.NewArgon2()
+			service := NewSessionManager(config, storage, nil, passwords)
+			if test.setup != nil {
+				test.setup(storage, passwords)
+			}
+
+			// Act
+			result, err := service.SignIn(core.SignInInput{
+				Email:    test.email,
+				Password: test.password,
+			}, "127.0.0.1", "test-agent")
+
+			// Assert
+			if (err != nil) != test.wantErr {
+				t.Fatalf("SignIn() error = %v, wantErr %v", err, test.wantErr)
+			}
+			if test.wantUser && result != nil && result.User == nil {
+				t.Error("SignIn() should return user")
+			}
+			if test.wantToken && result != nil && result.Token == "" {
+				t.Error("SignIn() should return token")
+			}
+			if test.wantUser && result != nil && result.User.Email != test.email {
+				t.Errorf("SignIn() returned wrong email: got %q, want %q", result.User.Email, test.email)
+			}
+		})
+	}
+}
+
+// Requirement: SignOut destroys a session and prevents further use of the token.
+func TestSessionManager_SignOut(t *testing.T) {
+	tests := []struct {
+		name      string
+		setupAuth func(*FakeStorageProvider, crypto.PasswordHandler) string // returns token
+		token     string
+		wantErr   bool
+	}{
+		{
+			name: "successfully signs out user",
+			setupAuth: func(storage *FakeStorageProvider, passwords crypto.PasswordHandler) string {
+				user := &core.User{ID: "user-alice", Email: "alice@example.com"}
+				_ = storage.CreateUser(user)
+				hashedPassword, _ := passwords.Hash("SecurePass123!")
+				account := &core.Account{
+					ID:         "account-alice",
+					UserID:     "user-alice",
+					ProviderID: "credential",
+					AccountID:  "alice@example.com",
+					Password:   &hashedPassword,
+				}
+				_ = storage.CreateAccount(account)
+
+				config := core.SessionConfig{MaxAge: 24 * time.Hour}
+				service := NewSessionManager(config, storage, nil, passwords)
+				result, _ := service.SignIn(core.SignInInput{
+					Email:    "alice@example.com",
+					Password: "SecurePass123!",
+				}, "127.0.0.1", "test-agent")
+				return result.Token
+			},
+			wantErr: false,
+		},
+		{
+			name:    "returns error for empty token",
+			token:   "",
+			wantErr: true,
+		},
+		{
+			name:    "returns error for invalid token",
+			token:   "invalid_token_xyz",
+			wantErr: true,
+		},
+		{
+			name: "prevents token use after signout",
+			setupAuth: func(storage *FakeStorageProvider, passwords crypto.PasswordHandler) string {
+				user := &core.User{ID: "user-bob", Email: "bob@example.com"}
+				_ = storage.CreateUser(user)
+				hashedPassword, _ := passwords.Hash("SecurePass123!")
+				account := &core.Account{
+					ID:         "account-bob",
+					UserID:     "user-bob",
+					ProviderID: "credential",
+					AccountID:  "bob@example.com",
+					Password:   &hashedPassword,
+				}
+				_ = storage.CreateAccount(account)
+
+				config := core.SessionConfig{MaxAge: 24 * time.Hour}
+				service := NewSessionManager(config, storage, nil, passwords)
+				result, _ := service.SignIn(core.SignInInput{
+					Email:    "bob@example.com",
+					Password: "SecurePass123!",
+				}, "127.0.0.1", "test-agent")
+				return result.Token
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
+			storage := NewFakeStorageProvider()
+			passwords := crypto.NewArgon2()
+			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			service := NewSessionManager(config, storage, nil, passwords)
+
+			token := test.token
+			if test.setupAuth != nil {
+				token = test.setupAuth(storage, passwords)
+			}
+
+			// Act
+			err := service.SignOut(token)
+
+			// Assert
+			if (err != nil) != test.wantErr {
+				t.Fatalf("SignOut() error = %v, wantErr %v", err, test.wantErr)
+			}
+
+			// If signout succeeded, verify token can't be used
+			if !test.wantErr && test.name == "prevents token use after signout" {
+				_, err := service.GetSession(token)
+				if err == nil {
+					t.Error("GetSession() should fail after SignOut()")
+				}
+			}
+		})
+	}
+}
+
+// Requirement: GetSession retrieves session data by token, validates expiry, and returns user info.
+func TestSessionManager_GetSession(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupAuth   func(*FakeStorageProvider, crypto.PasswordHandler) string // returns token
+		token       string
+		withExpired bool // create expired session
+		wantErr     bool
+		wantSession bool
+	}{
+		{
+			name: "returns session data for valid token",
+			setupAuth: func(storage *FakeStorageProvider, passwords crypto.PasswordHandler) string {
+				user := &core.User{ID: "user-alice", Email: "alice@example.com"}
+				_ = storage.CreateUser(user)
+				hashedPassword, _ := passwords.Hash("SecurePass123!")
+				account := &core.Account{
+					ID:         "account-alice",
+					UserID:     "user-alice",
+					ProviderID: "credential",
+					AccountID:  "alice@example.com",
+					Password:   &hashedPassword,
+				}
+				_ = storage.CreateAccount(account)
+
+				config := core.SessionConfig{MaxAge: 24 * time.Hour}
+				service := NewSessionManager(config, storage, nil, passwords)
+				result, _ := service.SignIn(core.SignInInput{
+					Email:    "alice@example.com",
+					Password: "SecurePass123!",
+				}, "127.0.0.1", "test-agent")
+				return result.Token
+			},
+			wantErr:     false,
+			wantSession: true,
+		},
+		{
+			name:        "returns error for empty token",
+			token:       "",
+			wantErr:     true,
+			wantSession: false,
+		},
+		{
+			name:        "returns error for invalid token",
+			token:       "invalid_token_xyz",
+			wantErr:     true,
+			wantSession: false,
+		},
+		{
+			name: "returns error for expired session",
+			setupAuth: func(storage *FakeStorageProvider, passwords crypto.PasswordHandler) string {
+				user := &core.User{ID: "user-charlie", Email: "charlie@example.com"}
+				_ = storage.CreateUser(user)
+				hashedPassword, _ := passwords.Hash("SecurePass123!")
+				account := &core.Account{
+					ID:         "account-charlie",
+					UserID:     "user-charlie",
+					ProviderID: "credential",
+					AccountID:  "charlie@example.com",
+					Password:   &hashedPassword,
+				}
+				_ = storage.CreateAccount(account)
+
+				// Create with expired session config
+				config := core.SessionConfig{MaxAge: -1 * time.Hour}
+				service := NewSessionManager(config, storage, nil, passwords)
+				result, _ := service.SignIn(core.SignInInput{
+					Email:    "charlie@example.com",
+					Password: "SecurePass123!",
+				}, "127.0.0.1", "test-agent")
+				return result.Token
+			},
+			wantErr:     true,
+			wantSession: false,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
+			storage := NewFakeStorageProvider()
+			passwords := crypto.NewArgon2()
+			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			service := NewSessionManager(config, storage, nil, passwords)
+
+			token := test.token
+			if test.setupAuth != nil {
+				token = test.setupAuth(storage, passwords)
+			}
+
+			// Act
+			sessionData, err := service.GetSession(token)
+
+			// Assert
+			if (err != nil) != test.wantErr {
+				t.Fatalf("GetSession() error = %v, wantErr %v", err, test.wantErr)
+			}
+			if test.wantSession && sessionData == nil {
+				t.Error("GetSession() should return session data")
+			}
+			if !test.wantSession && sessionData != nil {
+				t.Error("GetSession() should return error")
+			}
+			if test.wantSession && sessionData != nil {
+				if sessionData.Session == nil {
+					t.Error("SessionData.Session is nil")
+				}
+				if sessionData.User == nil {
+					t.Error("SessionData.User is nil")
 				}
 			}
 		})
