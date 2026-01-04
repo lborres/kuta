@@ -1,7 +1,6 @@
 package services
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/lborres/kuta/core"
@@ -11,121 +10,162 @@ import (
 type SessionManager struct {
 	config  core.SessionConfig
 	storage core.SessionStorage
-	cache   core.Cache
+	cache   core.Cache // optional, can be nil if caching is disabled
+	nanoid  *crypto.NanoIDGenerator
 }
 
-func DefaultSessionConfig() core.SessionConfig {
-	return core.SessionConfig{
-		MaxAge: 24 * time.Hour,
-	}
-}
-
-func NewSessionService(config core.SessionConfig, storage core.SessionStorage, cache core.Cache) *SessionManager {
-	return &SessionManager{
-		config:  config,
-		storage: storage,
-		cache:   cache,
-	}
-}
-
-func (sm *SessionManager) Create(userID, ipAddress, userAgent string) (*core.CreateSessionResult, error) {
-	nanoid := crypto.NewNanoID()
-
-	token, err := crypto.GenerateHashedToken(32)
+func NewSessionManager(config core.SessionConfig, storage core.SessionStorage, cache core.Cache) (*SessionManager, error) {
+	nanoid, err := crypto.NewNanoID()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate token: %w", err)
+		return nil, err
 	}
 
-	id, err := nanoid.Generate()
+	return &SessionManager{config: config, storage: storage, cache: cache, nanoid: nanoid}, nil
+}
+
+func (sm *SessionManager) Create(userID, ip, userAgent string) (*core.CreateSessionResult, error) {
+	// Generate cryptographic material
+	pair, err := crypto.GenerateHashedToken()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate ID: %w", err)
+		return nil, err
 	}
 
+	sessionID, err := sm.nanoid.Generate()
+	if err != nil {
+		return nil, err
+	}
+
+	// Create session with timestamps and expiry
 	now := time.Now()
 	session := &core.Session{
-		ID:        id,
+		ID:        sessionID,
 		UserID:    userID,
-		TokenHash: token.Hash,
-		IPAddress: ipAddress,
+		TokenHash: pair.Hash,
+		IPAddress: ip,
 		UserAgent: userAgent,
-		ExpiresAt: now.Add(sm.config.MaxAge),
 		CreatedAt: now,
 		UpdatedAt: now,
+		ExpiresAt: now.Add(sm.config.MaxAge),
 	}
 
+	// Persist session
 	if err := sm.storage.CreateSession(session); err != nil {
-		return nil, fmt.Errorf("failed to create session: %w", err)
+		return nil, err
 	}
 
-	return &core.CreateSessionResult{
-		Session: session,
-		Token:   token.Token,
-	}, nil
+	// Cache session if caching is enabled (cache is non-nil)
+	if sm.cache != nil {
+		// We don't fail the request if caching fails
+		_ = sm.cache.Set(pair.Hash, session)
+	}
+
+	return &core.CreateSessionResult{Session: session, Token: pair.Token}, nil
 }
 
 func (sm *SessionManager) Verify(token string) (*core.Session, error) {
+	// Validate input
 	if token == "" {
 		return nil, core.ErrInvalidToken
 	}
 
 	tokenHash := crypto.HashToken(token)
 
+	// Try cache first if caching is enabled
 	if sm.cache != nil {
-		if session, err := sm.cache.Get(tokenHash); err == nil && session != nil {
-			if time.Now().Before(session.ExpiresAt) {
-				return session, nil
+		if session, err := sm.cache.Get(tokenHash); err == nil {
+			// Cache hit - validate expiry
+			if time.Now().After(session.ExpiresAt) {
+				// Remove expired session from cache
+				_ = sm.cache.Delete(tokenHash)
+				return nil, core.ErrSessionExpired
 			}
-			sm.cache.Delete(tokenHash)
+			return session, nil
 		}
+		// Cache miss - fall through to storage
 	}
 
+	// Get from storage
 	session, err := sm.storage.GetSessionByHash(tokenHash)
 	if err != nil {
+		return nil, err
+	}
+	if session == nil {
 		return nil, core.ErrSessionNotFound
 	}
 
-	valid, err := crypto.VerifyToken(token, session.TokenHash)
-	if err != nil || !valid {
-		return nil, core.ErrInvalidToken
-	}
-
+	// Validate session hasn't expired
 	if time.Now().After(session.ExpiresAt) {
-		sm.storage.DeleteSessionByID(session.ID)
 		return nil, core.ErrSessionExpired
 	}
 
+	// Cache the session for future requests if caching is enabled
 	if sm.cache != nil {
-		sm.cache.Set(tokenHash, session)
+		_ = sm.cache.Set(tokenHash, session)
 	}
 
 	return session, nil
 }
 
 func (sm *SessionManager) Destroy(token string) error {
-	tokenHash := crypto.HashToken(token)
-
-	// Invalidate cache if available
-	if sm.cache != nil {
-		sm.cache.Delete(tokenHash)
+	// Validate input
+	if token == "" {
+		return core.ErrInvalidToken
 	}
 
-	return sm.storage.DeleteSessionByHash(tokenHash)
+	// Hash token to find session
+	tokenHash := crypto.HashToken(token)
+
+	// Delete session from storage by hash
+	err := sm.storage.DeleteSessionByHash(tokenHash)
+	if err != nil {
+		return err
+	}
+
+	// Remove from cache if caching is enabled
+	if sm.cache != nil {
+		_ = sm.cache.Delete(tokenHash)
+	}
+
+	return nil
 }
 
 func (sm *SessionManager) DestroyBySessionID(sessionID string) error {
-	session, err := sm.storage.GetSessionByID(sessionID)
-	if err == nil && sm.cache != nil {
-		sm.cache.Delete(session.TokenHash)
+	// Validate input
+	if sessionID == "" {
+		return core.ErrSessionNotFound
 	}
 
-	// still attempt to delete even if no session found
+	// Get session first to obtain tokenHash for cache invalidation
+	if sm.cache != nil {
+		session, err := sm.storage.GetSessionByID(sessionID)
+		if err == nil && session != nil {
+			// Remove from cache (ignore errors)
+			_ = sm.cache.Delete(session.TokenHash)
+		}
+	}
+
+	// Delete session from storage by ID
 	return sm.storage.DeleteSessionByID(sessionID)
 }
 
-func (sm *SessionManager) DestroyAllUserSessions(userID string) error {
-	if sm.cache != nil {
-		sm.cache.Clear()
+func (sm *SessionManager) DestroyAllUserSessions(userID string) (int, error) {
+	// Validate input
+	if userID == "" {
+		return 0, core.ErrUserNotFound
 	}
 
-	return sm.storage.DeleteUserSessions(userID)
+	// Delete all user sessions from storage
+	count, err := sm.storage.DeleteUserSessions(userID)
+	if err != nil {
+		return 0, err
+	}
+
+	// Clear entire cache when destroying all user sessions if caching is enabled
+	// This is a conservative approach - we could be more selective but would need
+	// to fetch all user sessions first, which defeats the performance benefit
+	if sm.cache != nil && count > 0 {
+		_ = sm.cache.Clear()
+	}
+
+	return count, nil
 }

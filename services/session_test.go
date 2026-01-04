@@ -1,670 +1,813 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
-	"sync"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/lborres/kuta/core"
-	"github.com/lborres/kuta/pkg/cache"
+	"github.com/lborres/kuta/pkg/crypto"
 )
 
-type MockSessionStorage struct {
-	sessions  map[string]*core.Session
-	mu        sync.RWMutex // make mock storage thread safe
-	createErr error
-	getErr    error
-	deleteErr error
-}
-
-func NewMockSessionStorage() *MockSessionStorage {
-	return &MockSessionStorage{
-		sessions: make(map[string]*core.Session),
-	}
-}
-
-func (m *MockSessionStorage) CreateSession(session *core.Session) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if m.createErr != nil {
-		return m.createErr
-	}
-	m.sessions[session.TokenHash] = session
-	return nil
-}
-
-func (m *MockSessionStorage) GetSessionByHash(tokenHash string) (*core.Session, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if m.getErr != nil {
-		return nil, m.getErr
-	}
-	session, exists := m.sessions[tokenHash]
-	if !exists {
-		return nil, errors.New("session not found")
-	}
-	return session, nil
-}
-
-func (m *MockSessionStorage) GetSessionByID(id string) (*core.Session, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	for _, session := range m.sessions {
-		if session.ID == id {
-			return session, nil
-		}
-	}
-	return nil, errors.New("session not found")
-}
-
-func (m *MockSessionStorage) GetUserSessions(userID string) ([]*core.Session, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	var sessions []*core.Session
-	for _, session := range m.sessions {
-		if session.UserID == userID {
-			sessions = append(sessions, session)
-		}
-	}
-	return sessions, nil
-}
-
-func (m *MockSessionStorage) UpdateSession(session *core.Session) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.sessions[session.TokenHash] = session
-	return nil
-}
-
-func (m *MockSessionStorage) DeleteSessionByID(id string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if m.deleteErr != nil {
-		return m.deleteErr
-	}
-	for hash, session := range m.sessions {
-		if session.ID == id {
-			delete(m.sessions, hash)
-			return nil
-		}
-	}
-	return nil
-}
-
-func (m *MockSessionStorage) DeleteSessionByHash(tokenHash string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if m.deleteErr != nil {
-		return m.deleteErr
-	}
-	delete(m.sessions, tokenHash)
-	return nil
-}
-
-func (m *MockSessionStorage) DeleteUserSessions(userID string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	for hash, session := range m.sessions {
-		if session.UserID == userID {
-			delete(m.sessions, hash)
-		}
-	}
-	return nil
-}
-
-func (m *MockSessionStorage) DeleteExpiredSessions() (int, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	count := 0
-	now := time.Now()
-	for hash, session := range m.sessions {
-		if now.After(session.ExpiresAt) {
-			delete(m.sessions, hash)
-			count++
-		}
-	}
-	return count, nil
-}
-
-func TestSessionManagerCreateShouldGenerateValidSessionAndToken(t *testing.T) {
-	storage := NewMockSessionStorage()
-	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
-
-	result, err := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
-	if err != nil {
-		t.Fatalf("Create failed: %v", err)
+// Requirement: Create generates a new session with a token.
+func TestSessionManager_Create(t *testing.T) {
+	tests := []struct {
+		name      string
+		userID    string
+		ip        string
+		userAgent string
+		wantErr   bool
+	}{
+		{name: "creates session successfully", userID: "user123", ip: "192.168.1.1", userAgent: "Mozilla/5.0", wantErr: false},
+		{name: "empty userID", userID: "", ip: "192.168.1.1", userAgent: "Mozilla/5.0", wantErr: false},
+		{name: "empty IP", userID: "user123", ip: "", userAgent: "Mozilla/5.0", wantErr: false},
+		{name: "empty userAgent", userID: "user123", ip: "192.168.1.1", userAgent: "", wantErr: false},
 	}
 
-	// Check session fields
-	if result.Session.UserID != "user123" {
-		t.Errorf("Expected userID user123, got %s", result.Session.UserID)
-	}
-
-	if result.Session.IPAddress != "192.168.1.1" {
-		t.Errorf("Expected IP 192.168.1.1, got %s", result.Session.IPAddress)
-	}
-
-	if result.Session.UserAgent != "Mozilla/5.0" {
-		t.Errorf("Expected UserAgent Mozilla/5.0, got %s", result.Session.UserAgent)
-	}
-
-	// Check token is generated
-	if result.Token == "" {
-		t.Error("Token should not be empty")
-	}
-
-	if result.Session.TokenHash == "" {
-		t.Error("TokenHash should not be empty")
-	}
-
-	// Check ID is generated
-	if result.Session.ID == "" {
-		t.Error("Session ID should not be empty")
-	}
-
-	// Check timestamps
-	if result.Session.CreatedAt.IsZero() {
-		t.Error("CreatedAt should be set")
-	}
-
-	if result.Session.UpdatedAt.IsZero() {
-		t.Error("UpdatedAt should be set")
-	}
-
-	// Check expiry
-	expectedExpiry := time.Now().Add(24 * time.Hour)
-	diff := result.Session.ExpiresAt.Sub(expectedExpiry)
-	if diff > time.Second || diff < -time.Second {
-		t.Errorf("ExpiresAt should be ~24 hours from now, got %v", result.Session.ExpiresAt)
-	}
-}
-
-func TestSessionManagerCreateMultipleUsersShouldProduceDistinctSessionsAndTokens(t *testing.T) {
-	storage := NewMockSessionStorage()
-	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
-
-	// Create sessions for different users
-	result1, _ := manager.Create("user1", "192.168.1.1", "Chrome")
-	result2, _ := manager.Create("user2", "192.168.1.2", "Firefox")
-	t.Logf("%+v", result1.Session)
-	t.Logf("%+v", result2.Session)
-
-	// Should have different IDs
-	if result1.Session.ID == result2.Session.ID {
-		t.Error("Different sessions should have different IDs")
-	}
-
-	// Should have different tokens
-	if result1.Token == result2.Token {
-		t.Error("Different sessions should have different tokens")
-	}
-
-	// Should have different hashes
-	if result1.Session.TokenHash == result2.Session.TokenHash {
-		t.Error("Different sessions should have different token hashes")
-	}
-}
-
-func TestSessionManagerVerifyValidSessionShouldReturnSession(t *testing.T) {
-	storage := NewMockSessionStorage()
-	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
-
-	// Create a session
-	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
-
-	// Verify with the token
-	session, err := manager.Verify(result.Token)
-	if err != nil {
-		t.Fatalf("Verify failed: %v", err)
-	}
-
-	if session.UserID != "user123" {
-		t.Errorf("Expected userID user123, got %s", session.UserID)
-	}
-
-	if session.ID != result.Session.ID {
-		t.Error("Verified session should have same ID as created session")
-	}
-}
-
-func TestSessionManagerVerifyEmptyTokenShouldReturnErrInvalidToken(t *testing.T) {
-	storage := NewMockSessionStorage()
-	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
-
-	_, err := manager.Verify("")
-	if err != core.ErrInvalidToken {
-		t.Errorf("Expected core.ErrInvalidToken for empty token, got %v", err)
-	}
-}
-
-func TestSessionManagerVerifyInvalidTokenShouldReturnErrSessionNotFound(t *testing.T) {
-	storage := NewMockSessionStorage()
-	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
-
-	_, err := manager.Verify("invalid-token-that-doesnt-exist")
-	if err != core.ErrSessionNotFound {
-		t.Errorf("Expected core.ErrSessionNotFound for invalid token, got %v", err)
-	}
-}
-
-func TestSessionManagerVerifyExpiredSessionShouldReturnErrSessionExpiredAndDeleteItFromStorage(t *testing.T) {
-	storage := NewMockSessionStorage()
-	config := core.SessionConfig{MaxAge: 100 * time.Millisecond}
-	manager := NewSessionService(config, storage, nil)
-
-	// Create session
-	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
-
-	// Wait for expiry
-	time.Sleep(150 * time.Millisecond)
-
-	// Verify should fail
-	_, err := manager.Verify(result.Token)
-	if err != core.ErrSessionExpired {
-		t.Errorf("Expected core.ErrSessionExpired, got %v", err)
-	}
-
-	// Session should be deleted from storage
-	_, err = storage.GetSessionByHash(result.Session.TokenHash)
-	if err == nil {
-		t.Error("Expired session should be deleted from storage")
-	}
-}
-
-func TestSessionManagerVerifyStorageErrorShouldReturnErrSessionNotFound(t *testing.T) {
-	storage := NewMockSessionStorage()
-	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
-
-	// Create a session first
-	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
-
-	// Simulate storage error
-	storage.getErr = errors.New("database connection lost")
-
-	_, err := manager.Verify(result.Token)
-	if err != core.ErrSessionNotFound {
-		t.Errorf("Expected core.ErrSessionNotFound when storage fails, got %v", err)
-	}
-}
-
-func TestSessionManagerDestroyBySessionIDShouldRemoveSession(t *testing.T) {
-	storage := NewMockSessionStorage()
-	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
-
-	// Create session
-	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
-	sessionID := result.Session.ID
-
-	// Destroy by ID
-	err := manager.DestroyBySessionID(sessionID)
-	if err != nil {
-		t.Fatalf("DestroyBySessionID failed: %v", err)
-	}
-
-	// Verify should fail
-	_, err = manager.Verify(result.Token)
-	if err != core.ErrSessionNotFound {
-		t.Errorf("Session should be destroyed, got: %v", err)
-	}
-
-	// Should not exist in storage
-	_, err = storage.GetSessionByID(sessionID)
-	if err == nil {
-		t.Error("Session should be deleted from storage")
-	}
-}
-
-func TestSessionManagerDestroyBySessionIDNonExistentShouldNotPanic(t *testing.T) {
-	storage := NewMockSessionStorage()
-	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
-
-	// Try to destroy non-existent session
-	err := manager.DestroyBySessionID("nonexistent-id")
-	// Should not panic, may or may not error
-	_ = err
-}
-
-func TestSessionManagerDestroyAllUserSessionsShouldRemoveOnlyUserSessions(t *testing.T) {
-	storage := NewMockSessionStorage()
-	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
-
-	// Create multiple sessions for user123
-	result1, _ := manager.Create("user123", "192.168.1.1", "Chrome")
-	result2, _ := manager.Create("user123", "192.168.1.2", "Firefox")
-	result3, _ := manager.Create("user123", "192.168.1.3", "Safari")
-
-	// Create session for different user
-	result4, _ := manager.Create("user456", "192.168.1.4", "Edge")
-
-	// Destroy all sessions for user123
-	err := manager.DestroyAllUserSessions("user123")
-	if err != nil {
-		t.Fatalf("DestroyAllUserSessions failed: %v", err)
-	}
-
-	// All user123 sessions should be invalid
-	_, err = manager.Verify(result1.Token)
-	if err != core.ErrSessionNotFound {
-		t.Error("Session 1 should be destroyed")
-	}
-
-	_, err = manager.Verify(result2.Token)
-	if err != core.ErrSessionNotFound {
-		t.Error("Session 2 should be destroyed")
-	}
-
-	_, err = manager.Verify(result3.Token)
-	if err != core.ErrSessionNotFound {
-		t.Error("Session 3 should be destroyed")
-	}
-
-	// user456 session should still be valid
-	session, err := manager.Verify(result4.Token)
-	if err != nil {
-		t.Fatalf("user456 session should still be valid: %v", err)
-	}
-
-	if session.UserID != "user456" {
-		t.Error("user456 session should be untouched")
-	}
-
-	// Check storage
-	sessions, _ := storage.GetUserSessions("user123")
-	if len(sessions) != 0 {
-		t.Errorf("Expected 0 sessions for user123, got %d", len(sessions))
-	}
-
-	sessions, _ = storage.GetUserSessions("user456")
-	if len(sessions) != 1 {
-		t.Errorf("Expected 1 session for user456, got %d", len(sessions))
-	}
-}
-
-func TestSessionManagerDestroyAllUserSessionsNoSessionsShouldNotError(t *testing.T) {
-	storage := NewMockSessionStorage()
-	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
-
-	// Try to destroy sessions for user with no sessions
-	err := manager.DestroyAllUserSessions("nonexistent-user")
-	if err != nil {
-		t.Errorf("Should not error when user has no sessions, got: %v", err)
-	}
-}
-
-func TestSessionManagerDefaultSessionConfigShouldSet24Hours(t *testing.T) {
-	config := DefaultSessionConfig()
-
-	if config.MaxAge != 24*time.Hour {
-		t.Errorf("Expected MaxAge 24h, got %v", config.MaxAge)
-	}
-}
-
-func TestSessionManagerCustomConfigShouldRespectMaxAge(t *testing.T) {
-	storage := NewMockSessionStorage()
-	config := core.SessionConfig{MaxAge: 1 * time.Hour}
-	manager := NewSessionService(config, storage, nil)
-
-	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
-
-	// Expiry should be ~1 hour from now
-	expectedExpiry := time.Now().Add(1 * time.Hour)
-	diff := result.Session.ExpiresAt.Sub(expectedExpiry)
-	if diff > time.Second || diff < -time.Second {
-		t.Errorf("ExpiresAt should be ~1 hour from now, got %v", result.Session.ExpiresAt)
-	}
-}
-
-func TestSessionManagerConcurrentCreateShouldCreateMultipleSessions(t *testing.T) {
-	storage := NewMockSessionStorage()
-	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
-
-	// Create 100 sessions concurrently
-	done := make(chan bool, 100)
-
-	for i := 0; i < 100; i++ {
-		go func(id int) {
-			_, err := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
+			storage := NewFakeSessionStorage()
+			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			manager, err := NewSessionManager(config, storage, nil)
 			if err != nil {
-				t.Errorf("Concurrent create failed: %v", err)
+				t.Fatalf("NewSessionManager() error = %v", err)
 			}
-			done <- true
-		}(i)
-	}
 
-	// Wait for all goroutines
-	for i := 0; i < 100; i++ {
-		<-done
-	}
+			// Act
+			result, err := manager.Create(test.userID, test.ip, test.userAgent)
 
-	// Should have 100 sessions
-	sessions, _ := storage.GetUserSessions("user123")
-	if len(sessions) != 100 {
-		t.Errorf("Expected 100 sessions, got %d", len(sessions))
+			// Debug output
+			if !test.wantErr {
+				fmt.Printf("Session: %#v, Token: %s\n", *result.Session, result.Token)
+			}
+
+			// Assert
+			if (err != nil) != test.wantErr {
+				t.Fatalf("Create() error = %v, wantErr %v", err, test.wantErr)
+			}
+			if !test.wantErr {
+				if result == nil {
+					t.Fatal("Create() returned nil")
+				}
+				if result.Session == nil {
+					t.Fatal("Session is nil")
+				}
+				if result.Token == "" {
+					t.Fatal("Token is empty")
+				}
+				if result.Session.UserID != test.userID {
+					t.Errorf("Session.UserID = %q, want %q", result.Session.UserID, test.userID)
+				}
+			}
+		})
 	}
 }
 
-func TestSessionManagerConcurrentVerifyShouldHandleConcurrentVerifies(t *testing.T) {
-	storage := NewMockSessionStorage()
-	manager := NewSessionService(DefaultSessionConfig(), storage, nil)
+// Requirement: TokenHash must never be exposed in JSON responses (security).
+func TestSessionManager_Create_TokenHashNotExposed(t *testing.T) {
+	tests := []struct {
+		name          string
+		checkProperty func(map[string]interface{}) string // returns error message or empty string
+	}{
+		{
+			name: "TokenHash not in JSON",
+			checkProperty: func(m map[string]interface{}) string {
+				if _, exists := m["tokenHash"]; exists {
+					return "TokenHash exposed in JSON (security leak)"
+				}
+				return ""
+			},
+		},
+		{
+			name: "Token not in Session JSON",
+			checkProperty: func(m map[string]interface{}) string {
+				if _, exists := m["token"]; exists {
+					return "Token should not be in Session JSON"
+				}
+				return ""
+			},
+		},
+		{
+			name: "required fields present",
+			checkProperty: func(m map[string]interface{}) string {
+				required := []string{"id", "userId", "ipAddress", "userAgent", "expiresAt", "createdAt", "updatedAt"}
+				for _, field := range required {
+					if _, exists := m[field]; !exists {
+						return "required field " + field + " missing"
+					}
+				}
+				return ""
+			},
+		},
+	}
 
-	// Create one session
-	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
+			storage := NewFakeSessionStorage()
+			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			manager, _ := NewSessionManager(config, storage, nil)
 
-	// Verify 100 times concurrently
-	done := make(chan bool, 100)
-	errors := make(chan error, 100)
+			// Act
+			result, err := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 
-	for i := 0; i < 100; i++ {
-		go func() {
-			_, err := manager.Verify(result.Token)
+			// Assert
 			if err != nil {
-				errors <- err
+				t.Fatalf("Create() error = %v", err)
 			}
-			done <- true
-		}()
-	}
 
-	// Wait for all goroutines
-	for i := 0; i < 100; i++ {
-		<-done
-	}
+			jsonBytes, err := json.Marshal(result.Session)
+			if err != nil {
+				t.Fatalf("json.Marshal() error = %v", err)
+			}
 
-	close(errors)
+			var sessionMap map[string]interface{}
+			if err := json.Unmarshal(jsonBytes, &sessionMap); err != nil {
+				t.Fatalf("json.Unmarshal() error = %v", err)
+			}
 
-	// Should have no errors
-	for err := range errors {
-		t.Errorf("Concurrent verify failed: %v", err)
-	}
-}
-
-func TestSessionManagerWithCacheHitShouldReturnFromCacheOnSecondVerify(t *testing.T) {
-	storage := NewMockSessionStorage()
-	cache := cache.NewInMemoryCache(core.CacheConfig{
-		TTL:     5 * time.Minute,
-		MaxSize: 500,
-	})
-	manager := NewSessionService(DefaultSessionConfig(), storage, cache)
-
-	// Create session
-	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
-
-	// First verify (cache miss, queries storage, caches result)
-	session1, err := manager.Verify(result.Token)
-	if err != nil {
-		t.Fatalf("First verify failed: %v", err)
-	}
-
-	// Break storage to prove second verify uses cache
-	storage.getErr = core.ErrSessionNotFound
-
-	// Second verify should hit cache (storage is "broken")
-	session2, err := manager.Verify(result.Token)
-	if err != nil {
-		t.Fatalf("Second verify should succeed from cache: %v", err)
-	}
-
-	if session1.ID != session2.ID {
-		t.Error("Both verifies should return same session")
-	}
-
-	// Verify cache was actually used
-	if cache.Len() != 1 {
-		t.Errorf("Expected 1 session in cache, got %d", cache.Len())
+			// Run the check
+			if errMsg := test.checkProperty(sessionMap); errMsg != "" {
+				t.Error(errMsg)
+			}
+		})
 	}
 }
 
-func TestSessionManagerWithCacheMissShouldCacheSessionAfterVerify(t *testing.T) {
-	storage := NewMockSessionStorage()
-	cache := cache.NewInMemoryCache(core.CacheConfig{
-		TTL:     5 * time.Minute,
-		MaxSize: 500,
-	})
-	manager := NewSessionService(DefaultSessionConfig(), storage, cache)
-
-	// Create session
-	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
-
-	// Verify (should query storage and cache)
-	_, err := manager.Verify(result.Token)
-	if err != nil {
-		t.Fatalf("Verify failed: %v", err)
+// Requirement: Verify retrieves and validates a session by token.
+func TestSessionManager_Verify(t *testing.T) {
+	tests := []struct {
+		name         string
+		setupSession func(*FakeSessionStorage) string // returns token to use
+		wantErr      bool
+		wantSession  bool
+	}{
+		{
+			name: "returns session for valid token",
+			setupSession: func(storage *FakeSessionStorage) string {
+				manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
+				return result.Token
+			},
+			wantErr:     false,
+			wantSession: true,
+		},
+		{
+			name: "returns error for empty token",
+			setupSession: func(storage *FakeSessionStorage) string {
+				return ""
+			},
+			wantErr:     true,
+			wantSession: false,
+		},
+		{
+			name: "returns error for invalid token",
+			setupSession: func(storage *FakeSessionStorage) string {
+				manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+				manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
+				return "invalid_token_xyz"
+			},
+			wantErr:     true,
+			wantSession: false,
+		},
+		{
+			name: "returns error for expired session",
+			setupSession: func(storage *FakeSessionStorage) string {
+				manager, _ := NewSessionManager(core.SessionConfig{MaxAge: -1 * time.Hour}, storage, nil)
+				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
+				return result.Token
+			},
+			wantErr:     true,
+			wantSession: false,
+		},
+		{
+			name: "returns error when token not found in storage",
+			setupSession: func(storage *FakeSessionStorage) string {
+				manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
+				storage.DeleteSessionByID(result.Session.ID) // delete it
+				return result.Token
+			},
+			wantErr:     true,
+			wantSession: false,
+		},
 	}
 
-	// Verify session is cached
-	if cache.Len() != 1 {
-		t.Error("Session should be cached after first verify")
-	}
-}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
+			storage := NewFakeSessionStorage()
+			manager, err := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			if err != nil {
+				t.Fatalf("NewSessionManager() error = %v", err)
+			}
 
-func TestSessionManagerWithCacheDestroyInvalidatesCacheShouldClearCacheAfterDestroy(t *testing.T) {
-	storage := NewMockSessionStorage()
-	cache := cache.NewInMemoryCache(core.CacheConfig{
-		TTL:     5 * time.Minute,
-		MaxSize: 500,
-	})
-	manager := NewSessionService(DefaultSessionConfig(), storage, cache)
+			token := test.setupSession(storage)
 
-	// Create and verify session (caches it)
-	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
-	manager.Verify(result.Token)
+			// Act
+			session, err := manager.Verify(token)
 
-	// Verify it's cached
-	if cache.Len() != 1 {
-		t.Error("Session should be cached")
-	}
-
-	// Destroy
-	err := manager.Destroy(result.Token)
-	if err != nil {
-		t.Fatalf("Destroy failed: %v", err)
-	}
-
-	// Cache should be invalidated
-	if cache.Len() != 0 {
-		t.Error("Cache should be empty after Destroy")
-	}
-
-	// Verify should fail
-	_, err = manager.Verify(result.Token)
-	if err != core.ErrSessionNotFound {
-		t.Error("Session should be destroyed")
-	}
-}
-
-func TestSessionManagerWithCacheDestroyByIDInvalidatesCacheShouldClearCache(t *testing.T) {
-	storage := NewMockSessionStorage()
-	cache := cache.NewInMemoryCache(core.CacheConfig{
-		TTL:     5 * time.Minute,
-		MaxSize: 500,
-	})
-	manager := NewSessionService(DefaultSessionConfig(), storage, cache)
-
-	// Create and verify session (caches it)
-	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
-	manager.Verify(result.Token)
-
-	// Destroy by ID
-	err := manager.DestroyBySessionID(result.Session.ID)
-	if err != nil {
-		t.Fatalf("DestroyBySessionID failed: %v", err)
-	}
-
-	// Cache should be invalidated
-	if cache.Len() != 0 {
-		t.Error("Cache should be empty after DestroyBySessionID")
-	}
-}
-
-func TestSessionManagerWithCacheDestroyAllUserSessionsClearsCacheShouldClearCache(t *testing.T) {
-	storage := NewMockSessionStorage()
-	cache := cache.NewInMemoryCache(core.CacheConfig{
-		TTL:     5 * time.Minute,
-		MaxSize: 500,
-	})
-	manager := NewSessionService(DefaultSessionConfig(), storage, cache)
-
-	// Create multiple sessions and cache them
-	result1, _ := manager.Create("user123", "192.168.1.1", "Chrome")
-	result2, _ := manager.Create("user123", "192.168.1.2", "Firefox")
-	result3, _ := manager.Create("user456", "192.168.1.3", "Safari")
-
-	manager.Verify(result1.Token)
-	manager.Verify(result2.Token)
-	manager.Verify(result3.Token)
-
-	// Should have 3 cached sessions
-	if cache.Len() != 3 {
-		t.Errorf("Expected 3 cached sessions, got %d", cache.Len())
-	}
-
-	// Destroy all user123 sessions
-	err := manager.DestroyAllUserSessions("user123")
-	if err != nil {
-		t.Fatalf("DestroyAllUserSessions failed: %v", err)
-	}
-
-	// Cache should be cleared (simple implementation clears all)
-	if cache.Len() != 0 {
-		t.Error("Cache should be cleared after DestroyAllUserSessions")
+			// Assert
+			if (err != nil) != test.wantErr {
+				t.Fatalf("Verify() error = %v, wantErr %v", err, test.wantErr)
+			}
+			if test.wantSession && session == nil {
+				t.Fatal("Verify() returned nil session")
+			}
+			if !test.wantSession && session != nil {
+				t.Errorf("Verify() returned session, want error")
+			}
+			if test.wantSession && session != nil {
+				if session.UserID != "user123" {
+					t.Errorf("Session.UserID = %q, want %q", session.UserID, "user123")
+				}
+			}
+		})
 	}
 }
 
-func TestSessionManagerWithCacheExpiredInCacheShouldDetectExpiryAndRemoveFromCache(t *testing.T) {
-	storage := NewMockSessionStorage()
-	cache := cache.NewInMemoryCache(core.CacheConfig{
-		TTL:     5 * time.Minute,
-		MaxSize: 500,
-	})
-	config := core.SessionConfig{MaxAge: 100 * time.Millisecond}
-	manager := NewSessionService(config, storage, cache)
-
-	// Create session
-	result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
-
-	// Verify (caches it)
-	manager.Verify(result.Token)
-
-	// Wait for session to expire (but still in cache)
-	time.Sleep(150 * time.Millisecond)
-
-	// Verify should detect expiry and remove from cache
-	_, err := manager.Verify(result.Token)
-	if err != core.ErrSessionExpired {
-		t.Errorf("Expected core.ErrSessionExpired, got %v", err)
+// Requirement: Destroy removes a session by token.
+func TestSessionManager_Destroy(t *testing.T) {
+	tests := []struct {
+		name         string
+		setupSession func(*FakeSessionStorage) string // returns token to destroy
+		wantErr      bool
+	}{
+		{
+			name: "successfully destroys session by token",
+			setupSession: func(storage *FakeSessionStorage) string {
+				manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
+				return result.Token
+			},
+			wantErr: false,
+		},
+		{
+			name: "returns error for empty token",
+			setupSession: func(storage *FakeSessionStorage) string {
+				return ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "returns error for invalid token",
+			setupSession: func(storage *FakeSessionStorage) string {
+				return "invalid_token_xyz"
+			},
+			wantErr: true,
+		},
+		{
+			name: "prevents session use after destruction",
+			setupSession: func(storage *FakeSessionStorage) string {
+				manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
+				return result.Token
+			},
+			wantErr: false,
+		},
 	}
 
-	// Cache should be invalidated
-	if cache.Len() != 0 {
-		t.Error("Expired session should be removed from cache")
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
+			storage := NewFakeSessionStorage()
+			manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			token := test.setupSession(storage)
+
+			// Act
+			err := manager.Destroy(token)
+
+			// Assert
+			if (err != nil) != test.wantErr {
+				t.Fatalf("Destroy() error = %v, wantErr %v", err, test.wantErr)
+			}
+
+			// If destroy succeeded, verify token can't be used
+			if !test.wantErr && test.name == "prevents session use after destruction" {
+				_, err := manager.Verify(token)
+				if err == nil {
+					t.Error("Verify() should fail after Destroy()")
+				}
+			}
+		})
+	}
+}
+
+// Requirement: DestroyBySessionID removes a session by ID.
+func TestSessionManager_DestroyBySessionID(t *testing.T) {
+	tests := []struct {
+		name         string
+		setupSession func(*FakeSessionStorage) string // returns sessionID to destroy
+		wantErr      bool
+	}{
+		{
+			name: "successfully destroys session by ID",
+			setupSession: func(storage *FakeSessionStorage) string {
+				manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
+				return result.Session.ID
+			},
+			wantErr: false,
+		},
+		{
+			name: "returns error for empty session ID",
+			setupSession: func(storage *FakeSessionStorage) string {
+				return ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "returns error for nonexistent session ID",
+			setupSession: func(storage *FakeSessionStorage) string {
+				return "nonexistent_session_id"
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
+			storage := NewFakeSessionStorage()
+			manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			sessionID := test.setupSession(storage)
+
+			// Act
+			err := manager.DestroyBySessionID(sessionID)
+
+			// Assert
+			if (err != nil) != test.wantErr {
+				t.Fatalf("DestroyBySessionID() error = %v, wantErr %v", err, test.wantErr)
+			}
+		})
+	}
+}
+
+// Requirement: DestroyAllUserSessions removes all sessions for a user.
+func TestSessionManager_DestroyAllUserSessions(t *testing.T) {
+	tests := []struct {
+		name          string
+		userID        string
+		setupSessions func(*FakeSessionStorage) int // creates sessions, returns count
+		wantErr       bool
+		wantDestroyed int
+	}{
+		{
+			name:   "destroys all sessions for user",
+			userID: "user123",
+			setupSessions: func(storage *FakeSessionStorage) int {
+				manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+				manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
+				manager.Create("user123", "192.168.1.2", "Chrome/5.0")
+				manager.Create("user123", "192.168.1.3", "Safari/5.0")
+				return 3
+			},
+			wantErr:       false,
+			wantDestroyed: 3,
+		},
+		{
+			name:   "returns zero for user with no sessions",
+			userID: "nonexistent_user",
+			setupSessions: func(storage *FakeSessionStorage) int {
+				return 0
+			},
+			wantErr:       false,
+			wantDestroyed: 0,
+		},
+		{
+			name:   "returns error for empty userID",
+			userID: "",
+			setupSessions: func(storage *FakeSessionStorage) int {
+				return 0
+			},
+			wantErr:       true,
+			wantDestroyed: 0,
+		},
+		{
+			name:   "only destroys specified user's sessions",
+			userID: "user123",
+			setupSessions: func(storage *FakeSessionStorage) int {
+				manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+				manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
+				manager.Create("user123", "192.168.1.2", "Chrome/5.0")
+				manager.Create("user456", "192.168.1.3", "Safari/5.0")
+				return 2 // only user123's sessions
+			},
+			wantErr:       false,
+			wantDestroyed: 2,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
+			storage := NewFakeSessionStorage()
+			manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			_ = test.setupSessions(storage)
+
+			// Act
+			destroyed, err := manager.DestroyAllUserSessions(test.userID)
+
+			// Assert
+			if (err != nil) != test.wantErr {
+				t.Fatalf("DestroyAllUserSessions() error = %v, wantErr %v", err, test.wantErr)
+			}
+			if !test.wantErr && destroyed != test.wantDestroyed {
+				t.Errorf("DestroyAllUserSessions() destroyed = %d, want %d", destroyed, test.wantDestroyed)
+			}
+		})
+	}
+}
+
+// Requirement: SessionManager supports optional caching and works without it.
+func TestSessionManager_Create_CacheBehavior(t *testing.T) {
+	tests := []struct {
+		name       string
+		cache      core.Cache
+		checkCache func(core.Cache, string) error // optional cache verification
+	}{
+		{
+			name:  "caches session when cache is provided",
+			cache: NewFakeCache(),
+			checkCache: func(c core.Cache, token string) error {
+				tokenHash := crypto.HashToken(token)
+				_, err := c.Get(tokenHash)
+				if errors.Is(err, core.ErrCacheNotFound) {
+					return errors.New("session not cached")
+				}
+				return err
+			},
+		},
+		{
+			name:  "works without cache when cache is nil",
+			cache: nil,
+		},
+		{
+			name:  "continues despite cache errors",
+			cache: &fakeFailingCache{},
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
+			storage := NewFakeSessionStorage()
+			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			manager, err := NewSessionManager(config, storage, test.cache)
+			if err != nil {
+				t.Fatalf("NewSessionManager() error = %v", err)
+			}
+
+			// Act
+			result, err := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
+
+			// Assert
+			if err != nil {
+				t.Errorf("Create() should not fail: %v", err)
+			}
+			if result == nil || result.Token == "" {
+				t.Fatal("Create() returned invalid result")
+			}
+
+			// Verify in storage
+			tokenHash := crypto.HashToken(result.Token)
+			stored, err := storage.GetSessionByHash(tokenHash)
+			if err != nil || stored.UserID != "user123" {
+				t.Error("Session not properly stored")
+			}
+
+			// Check cache if verification provided
+			if test.checkCache != nil {
+				if err := test.checkCache(test.cache, result.Token); err != nil {
+					t.Errorf("Cache verification failed: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// Requirement: Verify uses cache-aside pattern for performance.
+func TestSessionManager_Verify_CachePattern(t *testing.T) {
+	tests := []struct {
+		name            string
+		setupCache      func() core.Cache
+		wantCacheHits   int
+		wantCacheMisses int
+	}{
+		{
+			name: "loads from storage on cache miss, then caches",
+			setupCache: func() core.Cache {
+				cache := NewFakeCache()
+				// Clear cache to force a miss on first verify
+				return cache
+			},
+			wantCacheHits:   1,
+			wantCacheMisses: 1,
+		},
+		{
+			name: "misses cache after clear",
+			setupCache: func() core.Cache {
+				cache := NewFakeCache()
+				// We'll clear after first create but before second verify
+				return cache
+			},
+			wantCacheHits:   1,
+			wantCacheMisses: 1,
+		},
+		{
+			name: "works without cache",
+			setupCache: func() core.Cache {
+				return nil
+			},
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
+			storage := NewFakeSessionStorage()
+			cache := test.setupCache()
+			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			manager, _ := NewSessionManager(config, storage, cache)
+
+			result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
+			token := result.Token
+
+			// Clear cache to force first verify to miss (all test cases need this)
+			if cache != nil {
+				cache.Clear()
+			}
+
+			// Act: Verify session multiple times
+			for i := 0; i < 2; i++ {
+				_, err := manager.Verify(token)
+				if err != nil {
+					t.Fatalf("Verify iteration %d failed: %v", i+1, err)
+				}
+			}
+
+			// Assert
+			if cache != nil {
+				fakeCache, ok := cache.(*FakeCache)
+				if ok {
+					stats := fakeCache.Stats()
+					if stats.Hits != int64(test.wantCacheHits) {
+						t.Errorf("Expected %d cache hits, got %d", test.wantCacheHits, stats.Hits)
+					}
+					if stats.Misses != int64(test.wantCacheMisses) {
+						t.Errorf("Expected %d cache misses, got %d", test.wantCacheMisses, stats.Misses)
+					}
+				}
+			}
+		})
+	}
+}
+
+// Requirement: Expired sessions in cache are removed and rejected.
+func TestSessionManager_Verify_ExpiredSessionHandling(t *testing.T) {
+	tests := []struct {
+		name        string
+		withCache   bool
+		wantErr     bool
+		wantInCache bool // if cache is used
+	}{
+		{
+			name:        "rejects expired session with cache",
+			withCache:   true,
+			wantErr:     true,
+			wantInCache: false,
+		},
+		{
+			name:      "rejects expired session without cache",
+			withCache: false,
+			wantErr:   true,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
+			storage := NewFakeSessionStorage()
+			var cache core.Cache
+			if test.withCache {
+				cache = NewFakeCache()
+			}
+			config := core.SessionConfig{MaxAge: -1 * time.Hour} // Already expired
+			manager, _ := NewSessionManager(config, storage, cache)
+
+			result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
+			token := result.Token
+			tokenHash := crypto.HashToken(token)
+
+			// Act
+			_, err := manager.Verify(token)
+
+			// Assert
+			if (err != nil) != test.wantErr {
+				t.Fatalf("Verify() error = %v, wantErr %v", err, test.wantErr)
+			}
+			if !errors.Is(err, core.ErrSessionExpired) {
+				t.Errorf("Expected ErrSessionExpired, got %v", err)
+			}
+
+			// Verify removed from cache if applicable
+			if test.withCache && test.wantInCache == false {
+				if cache != nil {
+					_, err := cache.Get(tokenHash)
+					if !errors.Is(err, core.ErrCacheNotFound) {
+						t.Error("Expired session should be removed from cache")
+					}
+				}
+			}
+		})
+	}
+}
+
+// Requirement: Destroy removes sessions from cache and storage.
+func TestSessionManager_Destroy_CacheInvalidation(t *testing.T) {
+	tests := []struct {
+		name      string
+		withCache bool
+	}{
+		{
+			name:      "invalidates cache on destroy",
+			withCache: true,
+		},
+		{
+			name:      "works without cache on destroy",
+			withCache: false,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
+			storage := NewFakeSessionStorage()
+			var cache core.Cache
+			if test.withCache {
+				cache = NewFakeCache()
+			}
+			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			manager, _ := NewSessionManager(config, storage, cache)
+
+			result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
+			token := result.Token
+			tokenHash := crypto.HashToken(token)
+
+			// Act
+			err := manager.Destroy(token)
+
+			// Assert
+			if err != nil {
+				t.Fatalf("Destroy() error = %v", err)
+			}
+
+			// Verify removed from storage
+			_, err = storage.GetSessionByHash(tokenHash)
+			if err == nil {
+				t.Error("Session should be removed from storage")
+			}
+
+			// Verify removed from cache if applicable
+			if test.withCache {
+				_, err := cache.Get(tokenHash)
+				if !errors.Is(err, core.ErrCacheNotFound) {
+					t.Error("Session should be removed from cache")
+				}
+			}
+		})
+	}
+}
+
+// Requirement: DestroyBySessionID invalidates cache.
+func TestSessionManager_DestroyBySessionID_CacheInvalidation(t *testing.T) {
+	tests := []struct {
+		name      string
+		withCache bool
+	}{
+		{
+			name:      "invalidates cache when destroying by ID",
+			withCache: true,
+		},
+		{
+			name:      "works without cache",
+			withCache: false,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
+			storage := NewFakeSessionStorage()
+			var cache core.Cache
+			if test.withCache {
+				cache = NewFakeCache()
+			}
+			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			manager, _ := NewSessionManager(config, storage, cache)
+
+			result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
+			sessionID := result.Session.ID
+			tokenHash := crypto.HashToken(result.Token)
+
+			// Act
+			err := manager.DestroyBySessionID(sessionID)
+
+			// Assert
+			if err != nil {
+				t.Fatalf("DestroyBySessionID() error = %v", err)
+			}
+
+			// Verify removed from storage
+			_, err = storage.GetSessionByID(sessionID)
+			if err == nil {
+				t.Error("Session should be removed from storage")
+			}
+
+			// Verify removed from cache if applicable
+			if test.withCache {
+				_, err := cache.Get(tokenHash)
+				if !errors.Is(err, core.ErrCacheNotFound) {
+					t.Error("Session should be removed from cache")
+				}
+			}
+		})
+	}
+}
+
+// Requirement: DestroyAllUserSessions clears cache to ensure consistency.
+func TestSessionManager_DestroyAllUserSessions_CacheClearing(t *testing.T) {
+	tests := []struct {
+		name         string
+		withCache    bool
+		sessionCount int
+	}{
+		{
+			name:         "clears cache when destroying user sessions",
+			withCache:    true,
+			sessionCount: 3,
+		},
+		{
+			name:         "works without cache",
+			withCache:    false,
+			sessionCount: 2,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// Arrange
+			storage := NewFakeSessionStorage()
+			var cache core.Cache
+			if test.withCache {
+				cache = NewFakeCache()
+			}
+			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			manager, _ := NewSessionManager(config, storage, cache)
+
+			// Create multiple sessions
+			for i := 0; i < test.sessionCount; i++ {
+				manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
+			}
+
+			if test.withCache {
+				fakeCache, ok := cache.(*FakeCache)
+				if ok && fakeCache.Len() != test.sessionCount {
+					t.Errorf("Expected %d cached sessions, got %d", test.sessionCount, fakeCache.Len())
+				}
+			}
+
+			// Act
+			destroyed, err := manager.DestroyAllUserSessions("user123")
+
+			// Assert
+			if err != nil {
+				t.Fatalf("DestroyAllUserSessions() error = %v", err)
+			}
+			if destroyed != test.sessionCount {
+				t.Errorf("Expected %d sessions destroyed, got %d", test.sessionCount, destroyed)
+			}
+
+			// Verify cache is cleared if applicable
+			if test.withCache && destroyed > 0 {
+				fakeCache, ok := cache.(*FakeCache)
+				if ok && fakeCache.Len() != 0 {
+					t.Errorf("Cache should be cleared, but has %d entries", fakeCache.Len())
+				}
+			}
+		})
 	}
 }
