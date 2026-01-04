@@ -117,6 +117,122 @@ func (f *FakeSessionStorage) DeleteExpiredSessions() (int, error) {
 	panic("not implemented")
 }
 
+// FakeStorageProvider is a test-only fake implementing core.StorageProvider.
+// It combines session, user, and account storage fakes.
+type FakeStorageProvider struct {
+	*FakeSessionStorage
+	users    map[string]*core.User
+	accounts map[string]*core.Account
+}
+
+func NewFakeStorageProvider() *FakeStorageProvider {
+	return &FakeStorageProvider{
+		FakeSessionStorage: NewFakeSessionStorage(),
+		users:              make(map[string]*core.User),
+		accounts:           make(map[string]*core.Account),
+	}
+}
+
+// UserStorage implementation
+func (f *FakeStorageProvider) CreateUser(u *core.User) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, exists := f.users[u.ID]; exists {
+		return core.ErrUserExists
+	}
+	f.users[u.ID] = u
+	return nil
+}
+
+func (f *FakeStorageProvider) GetUserByID(id string) (*core.User, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if u, ok := f.users[id]; ok {
+		return u, nil
+	}
+	return nil, core.ErrUserNotFound
+}
+
+func (f *FakeStorageProvider) GetUserByEmail(email string) (*core.User, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	for _, u := range f.users {
+		if u.Email == email {
+			return u, nil
+		}
+	}
+	return nil, core.ErrUserNotFound
+}
+
+func (f *FakeStorageProvider) UpdateUser(u *core.User) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, exists := f.users[u.ID]; !exists {
+		return core.ErrUserNotFound
+	}
+	f.users[u.ID] = u
+	return nil
+}
+
+func (f *FakeStorageProvider) DeleteUser(id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, exists := f.users[id]; !exists {
+		return core.ErrUserNotFound
+	}
+	delete(f.users, id)
+	return nil
+}
+
+// AccountStorage implementation
+func (f *FakeStorageProvider) CreateAccount(a *core.Account) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.accounts[a.ID] = a
+	return nil
+}
+
+func (f *FakeStorageProvider) GetAccountByID(id string) (*core.Account, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if a, ok := f.accounts[id]; ok {
+		return a, nil
+	}
+	return nil, errors.New("account not found")
+}
+
+func (f *FakeStorageProvider) GetAccountByUserAndProvider(userID, providerID string) ([]*core.Account, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	var accounts []*core.Account
+	for _, a := range f.accounts {
+		if a.UserID == userID && a.ProviderID == providerID {
+			accounts = append(accounts, a)
+		}
+	}
+	return accounts, nil
+}
+
+func (f *FakeStorageProvider) UpdateAccount(a *core.Account) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, exists := f.accounts[a.ID]; !exists {
+		return errors.New("account not found")
+	}
+	f.accounts[a.ID] = a
+	return nil
+}
+
+func (f *FakeStorageProvider) DeleteAccount(id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, exists := f.accounts[id]; !exists {
+		return errors.New("account not found")
+	}
+	delete(f.accounts, id)
+	return nil
+}
+
 // FakeCache is a test-only fake implementing core.Cache.
 // It stores sessions in a map and exposes error fields for behavior injection.
 type FakeCache struct {
@@ -232,19 +348,15 @@ type fakeFailingCache struct{}
 func (f *fakeFailingCache) Get(tokenHash string) (*core.Session, error) {
 	return nil, core.ErrCacheNotFound
 }
-
 func (f *fakeFailingCache) Set(tokenHash string, session *core.Session) error {
 	return errors.New("cache set failed")
 }
-
 func (f *fakeFailingCache) Delete(tokenHash string) error {
 	return errors.New("cache delete failed")
 }
-
 func (f *fakeFailingCache) Clear() error {
 	return errors.New("cache clear failed")
 }
-
 func (f *fakeFailingCache) Stats() core.CacheStats {
 	return core.CacheStats{}
 }

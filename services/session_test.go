@@ -31,10 +31,7 @@ func TestSessionManager_Create(t *testing.T) {
 			// Arrange
 			storage := NewFakeSessionStorage()
 			config := core.SessionConfig{MaxAge: 24 * time.Hour}
-			manager, err := NewSessionManager(config, storage, nil)
-			if err != nil {
-				t.Fatalf("NewSessionManager() error = %v", err)
-			}
+			manager := NewSessionManager(config, storage, nil)
 
 			// Act
 			result, err := manager.Create(test.userID, test.ip, test.userAgent)
@@ -109,7 +106,7 @@ func TestSessionManager_Create_TokenHashNotExposed(t *testing.T) {
 			// Arrange
 			storage := NewFakeSessionStorage()
 			config := core.SessionConfig{MaxAge: 24 * time.Hour}
-			manager, _ := NewSessionManager(config, storage, nil)
+			manager := NewSessionManager(config, storage, nil)
 
 			// Act
 			result, err := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
@@ -148,7 +145,7 @@ func TestSessionManager_Verify(t *testing.T) {
 		{
 			name: "returns session for valid token",
 			setupSession: func(storage *FakeSessionStorage) string {
-				manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+				manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
 				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 				return result.Token
 			},
@@ -166,7 +163,7 @@ func TestSessionManager_Verify(t *testing.T) {
 		{
 			name: "returns error for invalid token",
 			setupSession: func(storage *FakeSessionStorage) string {
-				manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+				manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
 				manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 				return "invalid_token_xyz"
 			},
@@ -176,7 +173,7 @@ func TestSessionManager_Verify(t *testing.T) {
 		{
 			name: "returns error for expired session",
 			setupSession: func(storage *FakeSessionStorage) string {
-				manager, _ := NewSessionManager(core.SessionConfig{MaxAge: -1 * time.Hour}, storage, nil)
+				manager := NewSessionManager(core.SessionConfig{MaxAge: -1 * time.Hour}, storage, nil)
 				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 				return result.Token
 			},
@@ -186,7 +183,7 @@ func TestSessionManager_Verify(t *testing.T) {
 		{
 			name: "returns error when token not found in storage",
 			setupSession: func(storage *FakeSessionStorage) string {
-				manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+				manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
 				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 				storage.DeleteSessionByID(result.Session.ID) // delete it
 				return result.Token
@@ -201,12 +198,8 @@ func TestSessionManager_Verify(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
 			storage := NewFakeSessionStorage()
-			manager, err := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
-			if err != nil {
-				t.Fatalf("NewSessionManager() error = %v", err)
-			}
-
 			token := test.setupSession(storage)
+			manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
 
 			// Act
 			session, err := manager.Verify(token)
@@ -240,7 +233,7 @@ func TestSessionManager_Destroy(t *testing.T) {
 		{
 			name: "successfully destroys session by token",
 			setupSession: func(storage *FakeSessionStorage) string {
-				manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+				manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
 				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 				return result.Token
 			},
@@ -263,7 +256,7 @@ func TestSessionManager_Destroy(t *testing.T) {
 		{
 			name: "prevents session use after destruction",
 			setupSession: func(storage *FakeSessionStorage) string {
-				manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+				manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
 				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 				return result.Token
 			},
@@ -276,7 +269,7 @@ func TestSessionManager_Destroy(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
 			storage := NewFakeSessionStorage()
-			manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
 			token := test.setupSession(storage)
 
 			// Act
@@ -308,7 +301,7 @@ func TestSessionManager_DestroyBySessionID(t *testing.T) {
 		{
 			name: "successfully destroys session by ID",
 			setupSession: func(storage *FakeSessionStorage) string {
-				manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+				manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
 				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 				return result.Session.ID
 			},
@@ -335,7 +328,7 @@ func TestSessionManager_DestroyBySessionID(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
 			storage := NewFakeSessionStorage()
-			manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
 			sessionID := test.setupSession(storage)
 
 			// Act
@@ -362,7 +355,7 @@ func TestSessionManager_DestroyAllUserSessions(t *testing.T) {
 			name:   "destroys all sessions for user",
 			userID: "user123",
 			setupSessions: func(storage *FakeSessionStorage) int {
-				manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+				manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
 				manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 				manager.Create("user123", "192.168.1.2", "Chrome/5.0")
 				manager.Create("user123", "192.168.1.3", "Safari/5.0")
@@ -393,7 +386,7 @@ func TestSessionManager_DestroyAllUserSessions(t *testing.T) {
 			name:   "only destroys specified user's sessions",
 			userID: "user123",
 			setupSessions: func(storage *FakeSessionStorage) int {
-				manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+				manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
 				manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 				manager.Create("user123", "192.168.1.2", "Chrome/5.0")
 				manager.Create("user456", "192.168.1.3", "Safari/5.0")
@@ -409,7 +402,7 @@ func TestSessionManager_DestroyAllUserSessions(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
 			storage := NewFakeSessionStorage()
-			manager, _ := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
+			manager := NewSessionManager(core.SessionConfig{MaxAge: 24 * time.Hour}, storage, nil)
 			_ = test.setupSessions(storage)
 
 			// Act
@@ -461,12 +454,7 @@ func TestSessionManager_Create_CacheBehavior(t *testing.T) {
 			// Arrange
 			storage := NewFakeSessionStorage()
 			config := core.SessionConfig{MaxAge: 24 * time.Hour}
-			manager, err := NewSessionManager(config, storage, test.cache)
-			if err != nil {
-				t.Fatalf("NewSessionManager() error = %v", err)
-			}
-
-			// Act
+			manager := NewSessionManager(config, storage, test.cache)
 			result, err := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 
 			// Assert
@@ -537,7 +525,7 @@ func TestSessionManager_Verify_CachePattern(t *testing.T) {
 			storage := NewFakeSessionStorage()
 			cache := test.setupCache()
 			config := core.SessionConfig{MaxAge: 24 * time.Hour}
-			manager, _ := NewSessionManager(config, storage, cache)
+			manager := NewSessionManager(config, storage, cache)
 
 			result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 			token := result.Token
@@ -603,7 +591,7 @@ func TestSessionManager_Verify_ExpiredSessionHandling(t *testing.T) {
 				cache = NewFakeCache()
 			}
 			config := core.SessionConfig{MaxAge: -1 * time.Hour} // Already expired
-			manager, _ := NewSessionManager(config, storage, cache)
+			manager := NewSessionManager(config, storage, cache)
 
 			result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 			token := result.Token
@@ -659,7 +647,7 @@ func TestSessionManager_Destroy_CacheInvalidation(t *testing.T) {
 				cache = NewFakeCache()
 			}
 			config := core.SessionConfig{MaxAge: 24 * time.Hour}
-			manager, _ := NewSessionManager(config, storage, cache)
+			manager := NewSessionManager(config, storage, cache)
 
 			result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 			token := result.Token
@@ -716,7 +704,7 @@ func TestSessionManager_DestroyBySessionID_CacheInvalidation(t *testing.T) {
 				cache = NewFakeCache()
 			}
 			config := core.SessionConfig{MaxAge: 24 * time.Hour}
-			manager, _ := NewSessionManager(config, storage, cache)
+			manager := NewSessionManager(config, storage, cache)
 
 			result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
 			sessionID := result.Session.ID
@@ -776,7 +764,7 @@ func TestSessionManager_DestroyAllUserSessions_CacheClearing(t *testing.T) {
 				cache = NewFakeCache()
 			}
 			config := core.SessionConfig{MaxAge: 24 * time.Hour}
-			manager, _ := NewSessionManager(config, storage, cache)
+			manager := NewSessionManager(config, storage, cache)
 
 			// Create multiple sessions
 			for i := 0; i < test.sessionCount; i++ {

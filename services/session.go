@@ -14,13 +14,9 @@ type SessionManager struct {
 	nanoid  *crypto.NanoIDGenerator
 }
 
-func NewSessionManager(config core.SessionConfig, storage core.SessionStorage, cache core.Cache) (*SessionManager, error) {
-	nanoid, err := crypto.NewNanoID()
-	if err != nil {
-		return nil, err
-	}
-
-	return &SessionManager{config: config, storage: storage, cache: cache, nanoid: nanoid}, nil
+func NewSessionManager(config core.SessionConfig, storage core.SessionStorage, cache core.Cache) *SessionManager {
+	nanoid, _ := crypto.NewNanoID()
+	return &SessionManager{config: config, storage: storage, cache: cache, nanoid: nanoid}
 }
 
 func (sm *SessionManager) Create(userID, ip, userAgent string) (*core.CreateSessionResult, error) {

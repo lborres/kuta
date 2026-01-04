@@ -1,77 +1,114 @@
 package services
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/lborres/kuta/core"
 	"github.com/lborres/kuta/pkg/crypto"
 )
 
+// AuthService handles user authentication (signup, signin, signout).
 type AuthService struct {
-	db             core.StorageAdapter
-	passwordHasher crypto.PasswordHandler
-	sessionManager SessionManager
+	storage   core.StorageProvider
+	sessions  *SessionManager
+	passwords crypto.PasswordHandler
+	nanoid    *crypto.NanoIDGenerator
 }
 
-// Ensure AuthService implements AuthHandler
-var _ core.AuthHandler = (*AuthService)(nil)
-
-func NewAuthService(db *core.StorageAdapter, passwordHasher *crypto.PasswordHandler, sessionManager *SessionManager) *AuthService {
+// NewAuthService creates a new authentication service.
+func NewAuthService(
+	storage core.StorageProvider,
+	sessions *SessionManager,
+	passwords crypto.PasswordHandler,
+) *AuthService {
+	nanoid, _ := crypto.NewNanoID()
 	return &AuthService{
-		db:             *db,
-		passwordHasher: *passwordHasher,
-		sessionManager: *sessionManager,
+		storage:   storage,
+		sessions:  sessions,
+		passwords: passwords,
+		nanoid:    nanoid,
 	}
 }
 
-// SignUp registers a new user with email and password
-func (s *AuthService) SignUp(input core.SignUpInput, ipAddress, userAgent string) (*core.SignUpResult, error) {
-	// Step 1: Check if user already exists
-	existingUser, err := s.db.GetUserByEmail(input.Email)
-	if err != nil && err != core.ErrUserNotFound {
-		return nil, fmt.Errorf("failed to check existing user: %w", err)
+// SignUp creates a new user and session.
+func (as *AuthService) SignUp(input core.SignUpInput, ipAddress, userAgent string) (*core.SignUpResult, error) {
+	// Validate email
+	if input.Email == "" {
+		return nil, core.ErrEmailRequired
 	}
-	if existingUser != nil {
+
+	// Validate password
+	if input.Password == "" {
+		return nil, core.ErrPasswordRequired
+	}
+
+	// Check if user already exists
+	_, err := as.storage.GetUserByEmail(input.Email)
+	if err == nil {
+		// User exists
 		return nil, core.ErrUserExists
 	}
-
-	// Step 2: Hash the password
-	hashedPassword, err := s.passwordHasher.Hash(input.Password)
-	if err != nil {
-		return nil, fmt.Errorf("failed to hash password: %w", err)
+	if err != core.ErrUserNotFound {
+		// Some other error occurred
+		return nil, err
 	}
 
-	// Step 3: Create the user
+	// Hash password
+	hashedPassword, err := as.passwords.Hash(input.Password)
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate user ID
+	userID, err := as.nanoid.Generate()
+	if err != nil {
+		return nil, err
+	}
+
+	// Create user
+	now := time.Now()
 	user := &core.User{
-		Email:         input.Email,
-		EmailVerified: false, // You can change this based on your requirements
-		Name:          input.Name,
-		Image:         input.Image,
+		ID:        userID,
+		Email:     input.Email,
+		Name:      input.Name,
+		Image:     input.Image,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 
-	err = s.db.CreateUser(user)
+	if err := as.storage.CreateUser(user); err != nil {
+		return nil, err
+	}
+
+	// Create account with hashed password
+	accountID, err := as.nanoid.Generate()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create user: %w", err)
+		return nil, err
 	}
 
-	// Step 4: Create a credential account for this user
 	account := &core.Account{
-		UserID:     user.ID,
-		ProviderID: "credential", // This is email/password authentication
-		AccountID:  user.ID,      // For credential provider, account ID = user ID
+		ID:         accountID,
+		UserID:     userID,
+		ProviderID: "credential", // Default credential provider
+		AccountID:  input.Email,  // Store email as account identifier
 		Password:   &hashedPassword,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 
-	err = s.db.CreateAccount(account)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create account: %w", err)
+	if err := as.storage.CreateAccount(account); err != nil {
+		// Cleanup: delete the user if account creation fails
+		_ = as.storage.DeleteUser(userID)
+		return nil, err
 	}
 
-	// Step 5: Create a session for the new user
-	sessionResult, err := s.sessionManager.Create(user.ID, ipAddress, userAgent)
+	// Create session
+	sessionResult, err := as.sessions.Create(userID, ipAddress, userAgent)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create session: %w", err)
+		// Cleanup: delete user and account if session creation fails
+		_ = as.storage.DeleteUser(userID)
+		_ = as.storage.DeleteAccount(accountID)
+		return nil, err
 	}
 
 	return &core.SignUpResult{
@@ -81,44 +118,61 @@ func (s *AuthService) SignUp(input core.SignUpInput, ipAddress, userAgent string
 	}, nil
 }
 
-// SignIn authenticates a user with email and password
-func (s *AuthService) SignIn(input core.SignInInput, ipAddress, userAgent string) (*core.SignInResult, error) {
-	// Step 1: Find the user by email
-	user, err := s.db.GetUserByEmail(input.Email)
-	if err != nil {
-		if err == core.ErrUserNotFound {
-			return nil, core.ErrInvalidCredentials
-		}
-		return nil, fmt.Errorf("failed to find user: %w", err)
+// SignIn authenticates a user and creates a session.
+func (as *AuthService) SignIn(input core.SignInInput, ipAddress, userAgent string) (*core.SignInResult, error) {
+	// Validate email
+	if input.Email == "" {
+		return nil, core.ErrEmailRequired
 	}
 
-	// Step 2: Get the credential account for this user
-	accounts, err := s.db.GetAccountByUserAndProvider(user.ID, "credential")
+	// Validate password
+	if input.Password == "" {
+		return nil, core.ErrPasswordRequired
+	}
+
+	// Get user by email
+	user, err := as.storage.GetUserByEmail(input.Email)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get account: %w", err)
+		if err == core.ErrUserNotFound {
+			return nil, core.ErrUserNotFound
+		}
+		return nil, err
+	}
+
+	// Get account(s) for this user with credential provider
+	accounts, err := as.storage.GetAccountByUserAndProvider(user.ID, "credential")
+	if err != nil {
+		return nil, err
 	}
 	if len(accounts) == 0 {
 		return nil, core.ErrInvalidCredentials
 	}
 
-	account := accounts[0]
-	if account.Password == nil {
+	// Find account with password and verify
+	var account *core.Account
+	for _, acc := range accounts {
+		if acc.Password != nil {
+			account = acc
+			break
+		}
+	}
+	if account == nil {
 		return nil, core.ErrInvalidCredentials
 	}
 
-	// Step 3: Verify the password
-	valid, err := s.passwordHasher.Verify(input.Password, *account.Password)
+	// Verify password
+	match, err := as.passwords.Verify(input.Password, *account.Password)
 	if err != nil {
-		return nil, fmt.Errorf("failed to verify password: %w", err)
+		return nil, err
 	}
-	if !valid {
+	if !match {
 		return nil, core.ErrInvalidCredentials
 	}
 
-	// Step 4: Create a new session
-	sessionResult, err := s.sessionManager.Create(user.ID, ipAddress, userAgent)
+	// Create session
+	sessionResult, err := as.sessions.Create(user.ID, ipAddress, userAgent)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create session: %w", err)
+		return nil, err
 	}
 
 	return &core.SignInResult{
@@ -128,42 +182,32 @@ func (s *AuthService) SignIn(input core.SignInInput, ipAddress, userAgent string
 	}, nil
 }
 
-// SignOut invalidates the current session
-func (s *AuthService) SignOut(tokenHash string) error {
-	err := s.db.DeleteSessionByHash(tokenHash)
-	if err != nil {
-		return fmt.Errorf("failed to delete session: %w", err)
-	}
-	return nil
+// SignOut destroys a session.
+func (as *AuthService) SignOut(token string) error {
+	return as.sessions.Destroy(token)
 }
 
-// GetSession retrieves session data by token
-func (s *AuthService) GetSession(token string) (*core.SessionData, error) {
-	// Hash the token to look it up
-	tokenHash := crypto.HashToken(token)
-
-	// Get session from storage
-	session, err := s.db.GetSessionByHash(tokenHash)
-	if err != nil {
-		if err == core.ErrSessionNotFound {
-			return nil, core.ErrInvalidToken
-		}
-		return nil, fmt.Errorf("failed to get session: %w", err)
+// GetSession retrieves session data by token.
+func (as *AuthService) GetSession(token string) (*core.SessionData, error) {
+	// Validate input
+	if token == "" {
+		return nil, core.ErrInvalidToken
 	}
 
-	// Check if session is expired
-	if session.ExpiresAt.Before(time.Now()) {
-		return nil, core.ErrSessionExpired
+	// Verify session by token
+	session, err := as.sessions.Verify(token)
+	if err != nil {
+		return nil, err
 	}
 
-	// Get the user
-	user, err := s.db.GetUserByID(session.UserID)
+	// Get user
+	user, err := as.storage.GetUserByID(session.UserID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user: %w", err)
+		return nil, err
 	}
 
 	return &core.SessionData{
-		User:    user,
 		Session: session,
+		User:    user,
 	}, nil
 }

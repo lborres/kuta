@@ -11,13 +11,16 @@ import (
 )
 
 type (
-	AuthStorage = core.StorageAdapter
-	AuthHandler = core.AuthHandler
-	Cache       = core.Cache
+	StorageProvider  = core.StorageProvider
+	AuthProvider     = core.AuthProvider
+	Cache            = core.Cache
+	HTTPProvider     = core.HTTPProvider
+	EndpointProvider = core.EndpointProvider
+	Endpoint         = core.Endpoint
+	RequestContext   = core.RequestContext
+	EndpointMetadata = core.EndpointMetadata
 
-	HTTPAdapter = core.HTTPAdapter
-
-	SessionManager = services.SessionManager
+	// SessionManager = services.SessionManager
 
 	PasswordHandler = crypto.PasswordHandler
 )
@@ -28,11 +31,12 @@ type (
 )
 
 type (
-	User        = core.User
-	Account     = core.Account
-	Session     = core.Session
-	SessionData = core.SessionData
-	CacheStats  = core.CacheStats
+	User          = core.User
+	Account       = core.Account
+	Session       = core.Session
+	SessionData   = core.SessionData
+	CacheStats    = core.CacheStats
+	ErrorResponse = core.ErrorResponse
 )
 
 type (
@@ -87,28 +91,24 @@ var (
 	ErrNotImplemented = core.ErrNotImplemented
 )
 
+// Exposes Kuta properties for user to configure
 type Config struct {
 	Secret string
 
-	Database core.StorageAdapter
+	Database core.StorageProvider
 
-	HTTP core.HTTPAdapter
+	HTTP core.HTTPProvider
 
 	// Optional config
-	SessionConfig  *core.SessionConfig
-	PasswordHasher crypto.PasswordHandler
-	BasePath       string
+	SessionConfig   *core.SessionConfig
+	PasswordHandler crypto.PasswordHandler
+	BasePath        string
 
-	CacheAdapter core.Cache
-	DisableCache bool
+	CacheProvider core.Cache
+	DisableCache  bool
 }
 
 type Kuta struct {
-	SessionManager *services.SessionManager
-	AuthService    *services.AuthService
-	Database       core.StorageAdapter
-	Secret         string
-	BasePath       string
 }
 
 func New(config Config) (*Kuta, error) {
@@ -127,9 +127,9 @@ func New(config Config) (*Kuta, error) {
 
 	// Set Defaults
 
-	cacheAdapter := config.CacheAdapter
-	if cacheAdapter == nil && !config.DisableCache {
-		cacheAdapter = cache.NewInMemoryCache(core.CacheConfig{
+	cacheProvider := config.CacheProvider
+	if cacheProvider == nil && !config.DisableCache {
+		cacheProvider = cache.NewInMemoryCache(core.CacheConfig{
 			TTL:     5 * time.Minute,
 			MaxSize: 500,
 		})
@@ -142,9 +142,9 @@ func New(config Config) (*Kuta, error) {
 		}
 	}
 
-	passwordHasher := config.PasswordHasher
-	if passwordHasher == nil {
-		passwordHasher = crypto.NewArgon2()
+	passwordHandler := config.PasswordHandler
+	if passwordHandler == nil {
+		passwordHandler = crypto.NewArgon2()
 	}
 
 	basePath := config.BasePath
@@ -152,21 +152,15 @@ func New(config Config) (*Kuta, error) {
 		basePath = defaultBasePath
 	}
 
-	sessionService := services.NewSessionService(*sessionConfig, config.Database, cacheAdapter)
-	authService := services.NewAuthService(&config.Database, &passwordHasher, sessionService)
+	// Create session service
+	sessionService := services.NewSessionManager(*sessionConfig, config.Database, cacheProvider)
 
-	kuta := &Kuta{
-		SessionManager: sessionService,
-		AuthService:    authService,
-		Database:       config.Database,
-		Secret:         config.Secret,
-		BasePath:       basePath,
-	}
+	// Create auth service
+	authService := services.NewAuthService(config.Database, sessionService, passwordHandler)
 
 	if err := config.HTTP.RegisterRoutes(authService, basePath, sessionConfig.MaxAge); err != nil {
 		return nil, err
 	}
 
-	// return kuta instance to provide more options for testing
-	return kuta, nil
+	return &Kuta{}, nil
 }
