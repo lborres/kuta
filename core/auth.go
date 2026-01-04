@@ -1,7 +1,7 @@
 package core
 
-// AuthService provides authentication operations for HTTP adapters
-type AuthService interface {
+// AuthProvider provides authentication operations for HTTP adapters
+type AuthProvider interface {
 	SignUp(input SignUpInput, ipAddress, userAgent string) (*SignUpResult, error)
 	SignIn(input SignInInput, ipAddress, userAgent string) (*SignInResult, error)
 	SignOut(token string) error

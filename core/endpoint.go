@@ -22,9 +22,9 @@ type EndpointMetadata struct {
 type RequestContext struct {
 	// Framework-agnostic context
 	Request interface{} // could be *http.Request, fiber.Ctx, etc
-	Auth    AuthService
+	Auth    AuthProvider
 	Session *Session
-	DB      AuthStorage
+	DB      StorageProvider
 }
 
 // ErrorResponse represents an error response structure

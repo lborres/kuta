@@ -9,7 +9,7 @@ type SessionStorage interface {
 	UpdateSession(session *Session) error
 	DeleteSessionByID(id string) error
 	DeleteSessionByHash(tokenHash string) error
-	DeleteUserSessions(userID string) error
+	DeleteUserSessions(userID string) (int, error)
 	DeleteExpiredSessions() (int, error)
 }
 
@@ -31,7 +31,7 @@ type AccountStorage interface {
 	DeleteAccount(id string) error
 }
 
-type AuthStorage interface {
+type StorageProvider interface {
 	UserStorage
 	AccountStorage
 	SessionStorage

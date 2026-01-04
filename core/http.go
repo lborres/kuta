@@ -2,6 +2,6 @@ package core
 
 import "time"
 
-type HTTPAdapter interface {
-	RegisterRoutes(handler AuthService, basePath string, ttl time.Duration) error
+type HTTPProvider interface {
+	RegisterRoutes(handler AuthProvider, basePath string, ttl time.Duration) error
 }
