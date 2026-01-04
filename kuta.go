@@ -40,10 +40,11 @@ type (
 )
 
 type (
-	SignUpInput  = core.SignUpInput
-	SignUpResult = core.SignUpResult
-	SignInInput  = core.SignInInput
-	SignInResult = core.SignInResult
+	SignUpInput   = core.SignUpInput
+	SignUpResult  = core.SignUpResult
+	SignInInput   = core.SignInInput
+	SignInResult  = core.SignInResult
+	RefreshResult = core.RefreshResult
 )
 
 const (

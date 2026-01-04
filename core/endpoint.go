@@ -23,8 +23,6 @@ type RequestContext struct {
 	// Framework-agnostic context
 	Request interface{} // could be *http.Request, fiber.Ctx, etc
 	Auth    AuthProvider
-	Session *Session
-	DB      StorageProvider
 }
 
 // ErrorResponse represents an error response structure
