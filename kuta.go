@@ -110,6 +110,9 @@ type Config struct {
 }
 
 type Kuta struct {
+	Protected    interface{}
+	authProvider core.AuthProvider
+	httpAdapter  core.HTTPProvider
 }
 
 func New(config Config) (*Kuta, error) {
@@ -159,5 +162,13 @@ func New(config Config) (*Kuta, error) {
 		return nil, err
 	}
 
-	return &Kuta{}, nil
+	k := &Kuta{
+		authProvider: sessionService,
+		httpAdapter:  config.HTTP,
+
+		// Set exported Protected field to the framework-specific middleware value
+		Protected: config.HTTP.BuildProtectedMiddleware(sessionService),
+	}
+
+	return k, nil
 }

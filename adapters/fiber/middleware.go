@@ -1,40 +1,34 @@
 package fiber
 
 import (
-	"strings"
-
 	"github.com/gofiber/fiber/v3"
 	"github.com/lborres/kuta"
 )
 
-func (a *Adapter) requireAuth(ctx fiber.Ctx) error {
-	authHeader := ctx.Get("Authorization")
+// BuildProtectedMiddleware creates a Fiber middleware that validates auth tokens
+// and stores user/session data in the context for downstream handlers.
+func (a *Adapter) BuildProtectedMiddleware(authProvider kuta.AuthProvider) interface{} {
+	return func(c fiber.Ctx) error {
+		// Extract and validate token from Authorization header
+		token := extractToken(c)
+		if token == "" {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": kuta.ErrMissingAuthHeader.Error(),
+			})
+		}
 
-	if authHeader == "" {
-		return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": kuta.ErrMissingAuthHeader,
-		})
+		// Validate token and retrieve session data
+		sessionData, err := authProvider.GetSession(token)
+		if err != nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		}
+
+		// Store user and session in context for downstream handlers
+		c.Locals("user", sessionData.User)
+		c.Locals("session", sessionData.Session)
+
+		return c.Next()
 	}
-
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-	if token == authHeader || token == "" {
-		return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": kuta.ErrInvalidAuthHeader,
-		})
-	}
-
-	// 3. TODO: Validate token and get user session
-	// Example:
-	// session, err := authService.ValidateToken(ctx.Context(), token)
-	// if err != nil {
-	//     return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-	//         "error": "invalid or expired token",
-	//     })
-	// }
-
-	// 4. Store user info in context for downstream handlers
-	// ctx.Locals("userId", session.UserID)
-	// ctx.Locals("session", session)
-
-	return ctx.Next()
 }
