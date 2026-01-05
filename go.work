@@ -2,7 +2,5 @@ go 1.25.4
 
 use (
   .
-  ./adapters/fiber
-  ./adapters/pgx
   ./examples/fiber-pgx-basic
 )
