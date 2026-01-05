@@ -41,6 +41,23 @@ func main() {
 
 That's it! You're good to go!
 
+You can now protect your endpoints:
+```go
+app.Get("/sensitive", k.Protected, SensitiveDataHandler)
+```
+
+The following endpoints are now available to you:
+``` sh
+POST /api/auth/sign-in # Email/password login, returns session token
+POST /api/auth/sign-up # User registration
+POST /api/auth/sign-out # Destroy current session
+GET /api/auth/session # Get current session info (verify token, return user data)
+POST /api/auth/refresh # Refresh session token (extend expiry)
+```
+
+See [examples](https://github.com/lborres/kuta/tree/main/examples) to learn more.
+
+
 ## Credits
 
 Inspired by [Better Auth](https://github.com/better-auth/better-auth) - bringing the same developer experience to Go.
