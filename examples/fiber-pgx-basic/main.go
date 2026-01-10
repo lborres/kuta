@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"strings"
-	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/logger"
@@ -67,9 +66,8 @@ func main() {
 		// provide your secret in a more secure way such as environment variables
 		Secret: "secretshouldbeatleast32charslong",
 
-		Database:      pgxadapter.New(pool),
-		HTTP:          fiberadapter.New(app),
-		SessionConfig: &kuta.SessionConfig{MaxAge: 24 * time.Hour},
+		Database: pgxadapter.New(pool),
+		HTTP:     fiberadapter.New(app),
 	})
 	if err != nil {
 		log.Fatalf("could not create kuta instance: %v", err)

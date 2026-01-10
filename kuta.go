@@ -10,6 +10,7 @@ import (
 	"github.com/lborres/kuta/services"
 )
 
+// Re-exports from core and services packages
 type (
 	StorageProvider  = core.StorageProvider
 	AuthProvider     = core.AuthProvider
@@ -19,32 +20,50 @@ type (
 	Endpoint         = core.Endpoint
 	RequestContext   = core.RequestContext
 	EndpointMetadata = core.EndpointMetadata
-
-	// SessionManager = services.SessionManager
-
-	PasswordHandler = crypto.PasswordHandler
+	PasswordHandler  = crypto.PasswordHandler
+	SessionConfig    = core.SessionConfig
+	CookieConfig     = core.CookieConfig
+	CacheConfig      = core.CacheConfig
+	User             = core.User
+	Account          = core.Account
+	Session          = core.Session
+	SessionData      = core.SessionData
+	CacheStats       = core.CacheStats
+	ErrorResponse    = core.ErrorResponse
+	SignUpInput      = core.SignUpInput
+	SignUpResult     = core.SignUpResult
+	SignInInput      = core.SignInInput
+	SignInResult     = core.SignInResult
+	RefreshResult    = core.RefreshResult
 )
 
-type (
-	SessionConfig = core.SessionConfig
-	CacheConfig   = core.CacheConfig
+// Errors
+var (
+	ErrUserExists          = core.ErrUserExists
+	ErrUserNotFound        = core.ErrUserNotFound
+	ErrInvalidCredentials  = core.ErrInvalidCredentials
+	ErrMissingAuthHeader   = core.ErrMissingAuthHeader
+	ErrInvalidToken        = core.ErrInvalidToken
+	ErrSessionNotFound     = core.ErrSessionNotFound
+	ErrSessionExpired      = core.ErrSessionExpired
+	ErrCacheNotFound       = core.ErrCacheNotFound
+	ErrInvalidAuthHeader   = core.ErrInvalidAuthHeader
+	ErrEmailRequired       = core.ErrEmailRequired
+	ErrPasswordRequired    = core.ErrPasswordRequired
+	ErrPasswordTooShort    = core.ErrPasswordTooShort
+	ErrPasswordTooLong     = core.ErrPasswordTooLong
+	ErrInvalidEmail        = core.ErrInvalidEmail
+	ErrDBAdapterRequired   = core.ErrDBAdapterRequired
+	ErrHTTPAdapterRequired = core.ErrHTTPAdapterRequired
+	ErrSecretRequired      = core.ErrSecretRequired
+	ErrSecretTooShort      = core.ErrSecretTooShort
+	ErrNotImplemented      = core.ErrNotImplemented
 )
 
-type (
-	User          = core.User
-	Account       = core.Account
-	Session       = core.Session
-	SessionData   = core.SessionData
-	CacheStats    = core.CacheStats
-	ErrorResponse = core.ErrorResponse
-)
-
-type (
-	SignUpInput   = core.SignUpInput
-	SignUpResult  = core.SignUpResult
-	SignInInput   = core.SignInInput
-	SignInResult  = core.SignInResult
-	RefreshResult = core.RefreshResult
+// Constructors
+var (
+	NewInMemoryCache = cache.NewInMemoryCache
+	NewArgon2        = crypto.NewArgon2
 )
 
 const (
@@ -52,123 +71,93 @@ const (
 	defaultSecretLen = 32
 )
 
-// Constructors & helpers (convenience re-exports)
-var (
-	NewInMemoryCache = cache.NewInMemoryCache
-	NewArgon2        = crypto.NewArgon2
-)
-
-var (
-	ErrUserExists         = core.ErrUserExists
-	ErrUserNotFound       = core.ErrUserNotFound
-	ErrInvalidCredentials = core.ErrInvalidCredentials
-)
-
-var (
-	ErrMissingAuthHeader = core.ErrMissingAuthHeader
-	ErrInvalidToken      = core.ErrInvalidToken
-	ErrSessionNotFound   = core.ErrSessionNotFound
-	ErrSessionExpired    = core.ErrSessionExpired
-	ErrCacheNotFound     = core.ErrCacheNotFound
-)
-
-var (
-	ErrInvalidAuthHeader = core.ErrInvalidAuthHeader
-	ErrEmailRequired     = core.ErrEmailRequired
-	ErrPasswordRequired  = core.ErrPasswordRequired
-	ErrPasswordTooShort  = core.ErrPasswordTooShort
-	ErrPasswordTooLong   = core.ErrPasswordTooLong
-	ErrInvalidEmail      = core.ErrInvalidEmail
-)
-
-var (
-	ErrDBAdapterRequired   = core.ErrDBAdapterRequired
-	ErrHTTPAdapterRequired = core.ErrHTTPAdapterRequired
-	ErrSecretRequired      = core.ErrSecretRequired
-	ErrSecretTooShort      = core.ErrSecretTooShort
-)
-
-var (
-	ErrNotImplemented = core.ErrNotImplemented
-)
-
-// Exposes Kuta properties for user to configure
+// Config for Kuta initialization
 type Config struct {
-	Secret string
-
-	Database core.StorageProvider
-
-	HTTP core.HTTPProvider
-
-	// Optional config
-	SessionConfig   *core.SessionConfig
-	PasswordHandler crypto.PasswordHandler
+	Secret          string
+	Database        StorageProvider
+	HTTP            HTTPProvider
+	SessionConfig   *SessionConfig
+	CookieConfig    *CookieConfig
+	PasswordHandler PasswordHandler
 	BasePath        string
-
-	CacheProvider core.Cache
-	DisableCache  bool
+	CacheProvider   Cache
+	DisableCache    bool
 }
 
+// Kuta is the main auth instance
 type Kuta struct {
 	Protected    interface{}
-	authProvider core.AuthProvider
-	httpAdapter  core.HTTPProvider
+	authProvider AuthProvider
+	httpAdapter  HTTPProvider
 }
 
+// New creates a new Kuta instance
 func New(config Config) (*Kuta, error) {
 	if config.Secret == "" {
-		return nil, core.ErrSecretRequired
+		return nil, ErrSecretRequired
 	}
 	if len(config.Secret) < defaultSecretLen {
-		return nil, fmt.Errorf("%w - minimum of %d characters", core.ErrSecretTooShort, defaultSecretLen)
+		return nil, fmt.Errorf("%w - minimum of %d characters", ErrSecretTooShort, defaultSecretLen)
 	}
 	if config.Database == nil {
-		return nil, core.ErrDBAdapterRequired
+		return nil, ErrDBAdapterRequired
 	}
 	if config.HTTP == nil {
-		return nil, core.ErrHTTPAdapterRequired
+		return nil, ErrHTTPAdapterRequired
 	}
 
-	// Set Defaults
-
-	cacheProvider := config.CacheProvider
-	if cacheProvider == nil && !config.DisableCache {
-		cacheProvider = cache.NewInMemoryCache(core.CacheConfig{
+	// Set defaults
+	if config.CacheProvider == nil && !config.DisableCache {
+		config.CacheProvider = NewInMemoryCache(CacheConfig{
 			TTL:     5 * time.Minute,
 			MaxSize: 500,
 		})
 	}
 
-	sessionConfig := config.SessionConfig
-	if sessionConfig == nil {
-		sessionConfig = &core.SessionConfig{
-			MaxAge: 24 * time.Hour,
+	if config.SessionConfig == nil {
+		config.SessionConfig = &SessionConfig{
+			ExpiresIn: 7 * 24 * time.Hour,
+			UpdateAge: 24 * time.Hour,
 		}
 	}
 
-	passwordHandler := config.PasswordHandler
-	if passwordHandler == nil {
-		passwordHandler = crypto.NewArgon2()
+	// Wire CookieConfig into SessionConfig
+	if config.CookieConfig != nil {
+		config.SessionConfig.CookieConfig = config.CookieConfig
+	} else {
+		config.SessionConfig.CookieConfig = core.DefaultCookieConfig()
 	}
 
-	basePath := config.BasePath
-	if basePath == "" {
-		basePath = defaultBasePath
+	if config.PasswordHandler == nil {
+		config.PasswordHandler = NewArgon2()
 	}
 
-	sessionService := services.NewSessionManager(*sessionConfig, config.Database, cacheProvider, passwordHandler)
+	if config.BasePath == "" {
+		config.BasePath = defaultBasePath
+	}
 
-	if err := config.HTTP.RegisterRoutes(sessionService, basePath, sessionConfig.MaxAge); err != nil {
+	// Create session service
+	sessionService := services.NewSessionManager(
+		*config.SessionConfig,
+		config.Database,
+		config.CacheProvider,
+		config.PasswordHandler,
+	)
+
+	// Register HTTP routes
+	if err := config.HTTP.RegisterRoutes(
+		sessionService,
+		config.BasePath,
+		config.SessionConfig,
+	); err != nil {
 		return nil, err
 	}
 
-	k := &Kuta{
+	return &Kuta{
 		authProvider: sessionService,
 		httpAdapter:  config.HTTP,
 
 		// Set exported Protected field to the framework-specific middleware value
 		Protected: config.HTTP.BuildProtectedMiddleware(sessionService),
-	}
-
-	return k, nil
+	}, nil
 }

@@ -2,11 +2,58 @@ package fiber
 
 import (
 	"errors"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/lborres/kuta/core"
 )
+
+var (
+	cookieConfig  *core.CookieConfig
+	sessionConfig *core.SessionConfig
+)
+
+func setAuthCookie(fctx fiber.Ctx, cookiConfig *core.CookieConfig, sessionConfig *core.SessionConfig, token string) {
+	if cookiConfig == nil || cookiConfig.SessionToken.Name == "" {
+		return
+	}
+
+	expireTime := time.Now().Add(sessionConfig.ExpiresIn)
+	maxAge := int(sessionConfig.ExpiresIn.Seconds())
+
+	cookie := &fiber.Cookie{
+		Name:     cookiConfig.SessionToken.Name,
+		Value:    token,
+		HTTPOnly: cookiConfig.SessionToken.Attributes.HTTPOnly,
+		Secure:   cookiConfig.SessionToken.Attributes.Secure,
+		SameSite: cookiConfig.SessionToken.Attributes.SameSite,
+		Path:     cookiConfig.SessionToken.Attributes.Path,
+		Expires:  expireTime,
+		MaxAge:   maxAge,
+	}
+
+	fctx.Cookie(cookie)
+}
+
+func clearAuthCookie(fctx fiber.Ctx, cookiConfig *core.CookieConfig) {
+	if cookiConfig == nil || cookiConfig.SessionToken.Name == "" {
+		return
+	}
+
+	c := &fiber.Cookie{
+		Name:     cookiConfig.SessionToken.Name,
+		Value:    "",
+		Path:     cookiConfig.SessionToken.Attributes.Path,
+		Expires:  time.Now().Add(-1 * time.Hour),
+		MaxAge:   -1,
+		HTTPOnly: cookiConfig.SessionToken.Attributes.HTTPOnly,
+		Secure:   cookiConfig.SessionToken.Attributes.Secure,
+		SameSite: cookiConfig.SessionToken.Attributes.SameSite,
+	}
+	fctx.Cookie(c)
+}
 
 // handleSignUpFiber returns a handler for the sign-up endpoint
 func handleSignUpFiber(authProvider core.AuthProvider) func(*core.RequestContext) error {
@@ -26,6 +73,10 @@ func handleSignUpFiber(authProvider core.AuthProvider) func(*core.RequestContext
 		result, err := authProvider.SignUp(input, ipAddress, userAgent)
 		if err != nil {
 			return handleAuthError(fctx, err)
+		}
+
+		if cookieConfig != nil && sessionConfig != nil {
+			setAuthCookie(fctx, cookieConfig, sessionConfig, result.Token)
 		}
 
 		return fctx.Status(http.StatusCreated).JSON(result)
@@ -49,6 +100,11 @@ func handleSignInFiber(authProvider core.AuthProvider) func(*core.RequestContext
 			return handleAuthError(fctx, err)
 		}
 
+		if cookieConfig != nil && sessionConfig != nil {
+			log.Println("set cookie")
+			setAuthCookie(fctx, cookieConfig, sessionConfig, result.Token)
+		}
+
 		return fctx.Status(http.StatusOK).JSON(result)
 	}
 }
@@ -67,6 +123,10 @@ func handleSignOutFiber(authProvider core.AuthProvider) func(*core.RequestContex
 
 		if err := authProvider.SignOut(token); err != nil {
 			return handleAuthError(fctx, err)
+		}
+
+		if cookieConfig != nil {
+			clearAuthCookie(fctx, cookieConfig)
 		}
 
 		return fctx.Status(http.StatusOK).JSON(map[string]string{
@@ -113,6 +173,10 @@ func handleRefreshFiber(authProvider core.AuthProvider) func(*core.RequestContex
 			return handleAuthError(fctx, err)
 		}
 
+		if cookieConfig != nil && sessionConfig != nil {
+			setAuthCookie(fctx, cookieConfig, sessionConfig, result.Token)
+		}
+
 		return fctx.Status(http.StatusOK).JSON(result)
 	}
 }
@@ -126,8 +190,14 @@ func extractToken(c fiber.Ctx) string {
 		return authHeader[7:]
 	}
 
+	// Fall back to configured cookie name or default
+	name := core.DefaultSessionTokenName
+	if cookieConfig != nil && cookieConfig.SessionToken.Name != "" {
+		name = cookieConfig.SessionToken.Name
+	}
+
 	// Fall back to cookie
-	return c.Cookies("auth_token")
+	return c.Cookies(name)
 }
 
 // handleAuthError maps authentication errors to appropriate HTTP responses
@@ -148,6 +218,7 @@ func mapErrorToStatus(err error) int {
 	case errors.Is(err, core.ErrInvalidCredentials),
 		errors.Is(err, core.ErrUserNotFound),
 		errors.Is(err, core.ErrInvalidToken),
+		errors.Is(err, core.ErrSessionNotFound),
 		errors.Is(err, core.ErrSessionExpired):
 		return http.StatusUnauthorized
 

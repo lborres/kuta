@@ -1,8 +1,6 @@
 package fiber
 
 import (
-	"time"
-
 	"github.com/gofiber/fiber/v3"
 	"github.com/lborres/kuta/core"
 	"github.com/lborres/kuta/services"
@@ -19,9 +17,14 @@ func New(app *fiber.App) *Adapter {
 	return &Adapter{app: app}
 }
 
-func (a *Adapter) RegisterRoutes(service core.AuthProvider, basePath string, _ time.Duration) error {
+func (a *Adapter) RegisterRoutes(service core.AuthProvider, basePath string, sessionCfg *core.SessionConfig) error {
 	a.handler = service
 
+	// Wire package-level vars for cookie handling in handlers
+	if sessionCfg != nil {
+		sessionConfig = sessionCfg
+		cookieConfig = sessionCfg.CookieConfig
+	}
 	// Create endpoint registry with our handler factories
 	registry := services.NewEndpointRegistry()
 

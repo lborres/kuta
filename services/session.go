@@ -52,7 +52,7 @@ func (sm *SessionManager) Create(userID, ip, userAgent string) (*core.CreateSess
 		UserAgent: userAgent,
 		CreatedAt: now,
 		UpdatedAt: now,
-		ExpiresAt: now.Add(sm.config.MaxAge),
+		ExpiresAt: now.Add(sm.config.ExpiresIn),
 	}
 
 	// Persist session

@@ -1,8 +1,6 @@
 package core
 
-import "time"
-
 type HTTPProvider interface {
-	RegisterRoutes(handler AuthProvider, basePath string, ttl time.Duration) error
+	RegisterRoutes(handler AuthProvider, basePath string, sessionConfig *SessionConfig) error
 	BuildProtectedMiddleware(authProvider AuthProvider) interface{}
 }

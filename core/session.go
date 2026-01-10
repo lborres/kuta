@@ -23,8 +23,26 @@ type SessionData struct {
 	Session *Session `json:"session"`
 }
 
+// CookieCacheConfig defines behavior for client-side session caching in cookies
+type CookieCacheConfig struct {
+	Enabled   bool
+	MaxAge    time.Duration
+	UpdateAge time.Duration
+}
+
+// SessionConfig defines session lifetime and refresh behavior
 type SessionConfig struct {
-	MaxAge time.Duration
+	ExpiresIn    time.Duration
+	UpdateAge    time.Duration
+	CookieConfig *CookieConfig
+	CookieCache  *CookieCacheConfig
+}
+
+func DefaultSessionConfig() *SessionConfig {
+	return &SessionConfig{
+		ExpiresIn: 7 * 24 * time.Hour,
+		UpdateAge: 24 * time.Hour,
+	}
 }
 
 type CreateSessionResult struct {

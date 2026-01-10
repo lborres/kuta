@@ -13,7 +13,10 @@ import (
 
 // Helper function to create a SessionManager for tests
 func newTestSessionManager(storage core.StorageProvider, cache core.Cache) *SessionManager {
-	config := core.SessionConfig{MaxAge: 24 * time.Hour}
+	config := core.SessionConfig{
+		ExpiresIn: 7 * 24 * time.Hour,
+		UpdateAge: 24 * time.Hour,
+	}
 	passwords := crypto.NewArgon2()
 	return NewSessionManager(config, storage, cache, passwords)
 }
@@ -111,7 +114,10 @@ func TestSessionManager_Create_TokenHashNotExposed(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
 			storage := NewFakeStorageProvider()
-			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			config := core.SessionConfig{
+				ExpiresIn: 7 * 24 * time.Hour,
+				UpdateAge: 24 * time.Hour,
+			}
 			passwords := crypto.NewArgon2()
 			manager := NewSessionManager(config, storage, nil, passwords)
 
@@ -180,7 +186,10 @@ func TestSessionManager_Verify(t *testing.T) {
 		{
 			name: "returns error for expired session",
 			setupSession: func(storage *FakeStorageProvider) string {
-				config := core.SessionConfig{MaxAge: -1 * time.Hour}
+				config := core.SessionConfig{
+					ExpiresIn: -1 * time.Hour,
+					UpdateAge: 24 * time.Hour,
+				}
 				passwords := crypto.NewArgon2()
 				manager := NewSessionManager(config, storage, nil, passwords)
 				result, _ := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
@@ -462,7 +471,10 @@ func TestSessionManager_Create_CacheBehavior(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
 			storage := NewFakeStorageProvider()
-			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			config := core.SessionConfig{
+				ExpiresIn: 7 * 24 * time.Hour,
+				UpdateAge: 24 * time.Hour,
+			}
 			passwords := crypto.NewArgon2()
 			manager := NewSessionManager(config, storage, test.cache, passwords)
 			result, err := manager.Create("user123", "192.168.1.1", "Mozilla/5.0")
@@ -534,7 +546,10 @@ func TestSessionManager_Verify_CachePattern(t *testing.T) {
 			// Arrange
 			storage := NewFakeStorageProvider()
 			cache := test.setupCache()
-			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			config := core.SessionConfig{
+				ExpiresIn: 7 * 24 * time.Hour,
+				UpdateAge: 24 * time.Hour,
+			}
 			passwords := crypto.NewArgon2()
 			manager := NewSessionManager(config, storage, cache, passwords)
 
@@ -601,7 +616,10 @@ func TestSessionManager_Verify_ExpiredSessionHandling(t *testing.T) {
 			if test.withCache {
 				cache = NewFakeCache()
 			}
-			config := core.SessionConfig{MaxAge: -1 * time.Hour} // Already expired
+			config := core.SessionConfig{
+				ExpiresIn: -1 * time.Hour,
+				UpdateAge: 24 * time.Hour,
+			} // Already expired
 			passwords := crypto.NewArgon2()
 			manager := NewSessionManager(config, storage, cache, passwords)
 
@@ -658,7 +676,10 @@ func TestSessionManager_Destroy_CacheInvalidation(t *testing.T) {
 			if test.withCache {
 				cache = NewFakeCache()
 			}
-			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			config := core.SessionConfig{
+				ExpiresIn: 7 * 24 * time.Hour,
+				UpdateAge: 24 * time.Hour,
+			}
 			passwords := crypto.NewArgon2()
 			manager := NewSessionManager(config, storage, cache, passwords)
 
@@ -716,7 +737,10 @@ func TestSessionManager_DestroyBySessionID_CacheInvalidation(t *testing.T) {
 			if test.withCache {
 				cache = NewFakeCache()
 			}
-			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			config := core.SessionConfig{
+				ExpiresIn: 7 * 24 * time.Hour,
+				UpdateAge: 24 * time.Hour,
+			}
 			passwords := crypto.NewArgon2()
 			manager := NewSessionManager(config, storage, cache, passwords)
 
@@ -777,7 +801,10 @@ func TestSessionManager_DestroyAllUserSessions_CacheClearing(t *testing.T) {
 			if test.withCache {
 				cache = NewFakeCache()
 			}
-			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			config := core.SessionConfig{
+				ExpiresIn: 7 * 24 * time.Hour,
+				UpdateAge: 24 * time.Hour,
+			}
 			passwords := crypto.NewArgon2()
 			manager := NewSessionManager(config, storage, cache, passwords)
 
@@ -839,7 +866,10 @@ func TestSessionManager_Refresh(t *testing.T) {
 				}
 				_ = storage.CreateAccount(account)
 
-				config := core.SessionConfig{MaxAge: 24 * time.Hour}
+				config := core.SessionConfig{
+					ExpiresIn: 7 * 24 * time.Hour,
+					UpdateAge: 24 * time.Hour,
+				}
 				service := NewSessionManager(config, storage, nil, passwords)
 				result, _ := service.SignIn(core.SignInInput{
 					Email:    "alice@example.com",
@@ -882,7 +912,10 @@ func TestSessionManager_Refresh(t *testing.T) {
 				_ = storage.CreateAccount(account)
 
 				// Create with expired session config
-				config := core.SessionConfig{MaxAge: -1 * time.Hour}
+				config := core.SessionConfig{
+					ExpiresIn: -1 * time.Hour,
+					UpdateAge: 24 * time.Hour,
+				}
 				service := NewSessionManager(config, storage, nil, passwords)
 				result, _ := service.SignIn(core.SignInInput{
 					Email:    "charlie@example.com",
@@ -901,7 +934,10 @@ func TestSessionManager_Refresh(t *testing.T) {
 			// Arrange
 			storage := NewFakeStorageProvider()
 			passwords := crypto.NewArgon2()
-			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			config := core.SessionConfig{
+				ExpiresIn: 7 * 24 * time.Hour,
+				UpdateAge: 24 * time.Hour,
+			}
 			service := NewSessionManager(config, storage, nil, passwords)
 
 			token := test.setupAuth(storage, passwords)
@@ -955,7 +991,10 @@ func TestSessionManager_Refresh_CacheBehavior(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
 			storage := NewFakeStorageProvider()
-			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			config := core.SessionConfig{
+				ExpiresIn: 7 * 24 * time.Hour,
+				UpdateAge: 24 * time.Hour,
+			}
 			var cache core.Cache
 			if test.withCache {
 				cache = NewFakeCache()
@@ -1063,7 +1102,10 @@ func TestSessionManager_SignUp(t *testing.T) {
 			if test.setup != nil {
 				test.setup(storage)
 			}
-			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			config := core.SessionConfig{
+				ExpiresIn: 7 * 24 * time.Hour,
+				UpdateAge: 24 * time.Hour,
+			}
 			passwords := crypto.NewArgon2()
 			service := NewSessionManager(config, storage, nil, passwords)
 
@@ -1173,7 +1215,10 @@ func TestSessionManager_SignIn(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			// Arrange
 			storage := NewFakeStorageProvider()
-			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			config := core.SessionConfig{
+				ExpiresIn: 7 * 24 * time.Hour,
+				UpdateAge: 24 * time.Hour,
+			}
 			passwords := crypto.NewArgon2()
 			service := NewSessionManager(config, storage, nil, passwords)
 			if test.setup != nil {
@@ -1226,7 +1271,10 @@ func TestSessionManager_SignOut(t *testing.T) {
 				}
 				_ = storage.CreateAccount(account)
 
-				config := core.SessionConfig{MaxAge: 24 * time.Hour}
+				config := core.SessionConfig{
+					ExpiresIn: 7 * 24 * time.Hour,
+					UpdateAge: 24 * time.Hour,
+				}
 				service := NewSessionManager(config, storage, nil, passwords)
 				result, _ := service.SignIn(core.SignInInput{
 					Email:    "alice@example.com",
@@ -1261,7 +1309,10 @@ func TestSessionManager_SignOut(t *testing.T) {
 				}
 				_ = storage.CreateAccount(account)
 
-				config := core.SessionConfig{MaxAge: 24 * time.Hour}
+				config := core.SessionConfig{
+					ExpiresIn: 7 * 24 * time.Hour,
+					UpdateAge: 24 * time.Hour,
+				}
 				service := NewSessionManager(config, storage, nil, passwords)
 				result, _ := service.SignIn(core.SignInInput{
 					Email:    "bob@example.com",
@@ -1279,7 +1330,10 @@ func TestSessionManager_SignOut(t *testing.T) {
 			// Arrange
 			storage := NewFakeStorageProvider()
 			passwords := crypto.NewArgon2()
-			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			config := core.SessionConfig{
+				ExpiresIn: 7 * 24 * time.Hour,
+				UpdateAge: 24 * time.Hour,
+			}
 			service := NewSessionManager(config, storage, nil, passwords)
 
 			token := test.token
@@ -1331,7 +1385,10 @@ func TestSessionManager_GetSession(t *testing.T) {
 				}
 				_ = storage.CreateAccount(account)
 
-				config := core.SessionConfig{MaxAge: 24 * time.Hour}
+				config := core.SessionConfig{
+					ExpiresIn: 7 * 24 * time.Hour,
+					UpdateAge: 24 * time.Hour,
+				}
 				service := NewSessionManager(config, storage, nil, passwords)
 				result, _ := service.SignIn(core.SignInInput{
 					Email:    "alice@example.com",
@@ -1370,7 +1427,10 @@ func TestSessionManager_GetSession(t *testing.T) {
 				_ = storage.CreateAccount(account)
 
 				// Create with expired session config
-				config := core.SessionConfig{MaxAge: -1 * time.Hour}
+				config := core.SessionConfig{
+					ExpiresIn: -1 * time.Hour,
+					UpdateAge: 24 * time.Hour,
+				}
 				service := NewSessionManager(config, storage, nil, passwords)
 				result, _ := service.SignIn(core.SignInInput{
 					Email:    "charlie@example.com",
@@ -1389,7 +1449,10 @@ func TestSessionManager_GetSession(t *testing.T) {
 			// Arrange
 			storage := NewFakeStorageProvider()
 			passwords := crypto.NewArgon2()
-			config := core.SessionConfig{MaxAge: 24 * time.Hour}
+			config := core.SessionConfig{
+				ExpiresIn: 7 * 24 * time.Hour,
+				UpdateAge: 24 * time.Hour,
+			}
 			service := NewSessionManager(config, storage, nil, passwords)
 
 			token := test.token
