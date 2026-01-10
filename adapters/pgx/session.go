@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/lborres/kuta"
+	"github.com/lborres/kuta/core"
 )
 
-func (a *Adapter) CreateSession(session *kuta.Session) error {
+func (a *Adapter) CreateSession(session *core.Session) error {
 	ctx := context.Background()
 
 	query := `INSERT INTO public.sessions (id, user_id, token_hash, ip_address, user_agent, expires_at)
@@ -29,19 +29,19 @@ func (a *Adapter) CreateSession(session *kuta.Session) error {
 	return nil
 }
 
-func (a *Adapter) GetSessionByHash(tokenHash string) (*kuta.Session, error) {
+func (a *Adapter) GetSessionByHash(tokenHash string) (*core.Session, error) {
 	ctx := context.Background()
 	query := `SELECT id, user_id, token_hash, ip_address, user_agent, expires_at, created_at, updated_at
 	          FROM public.sessions WHERE token_hash = $1`
 
-	session := &kuta.Session{}
+	session := &core.Session{}
 	err := a.pool.QueryRow(ctx, query, tokenHash).Scan(
 		&session.ID, &session.UserID, &session.TokenHash, &session.IPAddress, &session.UserAgent, &session.ExpiresAt, &session.CreatedAt, &session.UpdatedAt,
 	)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, kuta.ErrSessionNotFound
+			return nil, core.ErrSessionNotFound
 		}
 		return nil, err
 	}
@@ -49,19 +49,19 @@ func (a *Adapter) GetSessionByHash(tokenHash string) (*kuta.Session, error) {
 	return session, nil
 }
 
-func (a *Adapter) GetSessionByID(id string) (*kuta.Session, error) {
+func (a *Adapter) GetSessionByID(id string) (*core.Session, error) {
 	ctx := context.Background()
 	query := `SELECT id, user_id, token_hash, ip_address, user_agent, expires_at, created_at, updated_at
 	          FROM public.sessions WHERE id = $1`
 
-	session := &kuta.Session{}
+	session := &core.Session{}
 	err := a.pool.QueryRow(ctx, query, id).Scan(
 		&session.ID, &session.UserID, &session.TokenHash, &session.IPAddress, &session.UserAgent, &session.ExpiresAt, &session.CreatedAt, &session.UpdatedAt,
 	)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, kuta.ErrSessionNotFound
+			return nil, core.ErrSessionNotFound
 		}
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func (a *Adapter) GetSessionByID(id string) (*kuta.Session, error) {
 	return session, nil
 }
 
-func (a *Adapter) GetUserSessions(userID string) ([]*kuta.Session, error) {
+func (a *Adapter) GetUserSessions(userID string) ([]*core.Session, error) {
 	ctx := context.Background()
 	query := `SELECT id, user_id, token_hash, ip_address, user_agent, expires_at, created_at, updated_at
 	          FROM public.sessions WHERE user_id = $1 ORDER BY created_at DESC`
@@ -80,9 +80,9 @@ func (a *Adapter) GetUserSessions(userID string) ([]*kuta.Session, error) {
 	}
 	defer rows.Close()
 
-	var sessions []*kuta.Session
+	var sessions []*core.Session
 	for rows.Next() {
-		session := &kuta.Session{}
+		session := &core.Session{}
 		err := rows.Scan(
 			&session.ID, &session.UserID, &session.TokenHash, &session.IPAddress, &session.UserAgent, &session.ExpiresAt, &session.CreatedAt, &session.UpdatedAt,
 		)
@@ -99,7 +99,7 @@ func (a *Adapter) GetUserSessions(userID string) ([]*kuta.Session, error) {
 	return sessions, nil
 }
 
-func (a *Adapter) UpdateSession(session *kuta.Session) error {
+func (a *Adapter) UpdateSession(session *core.Session) error {
 	ctx := context.Background()
 	query := `UPDATE public.sessions SET token_hash = $1, ip_address = $2, user_agent = $3, expires_at = $4, updated_at = now()
 	          WHERE id = $5 RETURNING updated_at`
@@ -111,7 +111,7 @@ func (a *Adapter) UpdateSession(session *kuta.Session) error {
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return kuta.ErrSessionNotFound
+			return core.ErrSessionNotFound
 		}
 		return err
 	}

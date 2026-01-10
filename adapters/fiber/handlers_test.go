@@ -5,33 +5,33 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/lborres/kuta"
+	"github.com/lborres/kuta/core"
 )
 
-// mockAuthProvider is a test fake implementing kuta.AuthProvider interface
+// mockAuthProvider is a test fake implementing core.AuthProvider interface
 type mockAuthProvider struct {
 	signUpCalled     bool
-	signUpInput      kuta.SignUpInput
+	signUpInput      core.SignUpInput
 	signUpErr        error
-	signUpResult     *kuta.SignUpResult
+	signUpResult     *core.SignUpResult
 	signInCalled     bool
-	signInInput      kuta.SignInInput
+	signInInput      core.SignInInput
 	signInErr        error
-	signInResult     *kuta.SignInResult
+	signInResult     *core.SignInResult
 	signOutCalled    bool
 	signOutToken     string
 	signOutErr       error
 	getSessionCalled bool
 	getSessionToken  string
 	getSessionErr    error
-	getSessionData   *kuta.SessionData
+	getSessionData   *core.SessionData
 	refreshCalled    bool
 	refreshToken     string
 	refreshErr       error
-	refreshResult    *kuta.RefreshResult
+	refreshResult    *core.RefreshResult
 }
 
-func (m *mockAuthProvider) SignUp(input kuta.SignUpInput, ipAddress, userAgent string) (*kuta.SignUpResult, error) {
+func (m *mockAuthProvider) SignUp(input core.SignUpInput, ipAddress, userAgent string) (*core.SignUpResult, error) {
 	m.signUpCalled = true
 	m.signUpInput = input
 	if m.signUpErr != nil {
@@ -40,7 +40,7 @@ func (m *mockAuthProvider) SignUp(input kuta.SignUpInput, ipAddress, userAgent s
 	return m.signUpResult, nil
 }
 
-func (m *mockAuthProvider) SignIn(input kuta.SignInInput, ipAddress, userAgent string) (*kuta.SignInResult, error) {
+func (m *mockAuthProvider) SignIn(input core.SignInInput, ipAddress, userAgent string) (*core.SignInResult, error) {
 	m.signInCalled = true
 	m.signInInput = input
 	if m.signInErr != nil {
@@ -55,7 +55,7 @@ func (m *mockAuthProvider) SignOut(token string) error {
 	return m.signOutErr
 }
 
-func (m *mockAuthProvider) GetSession(token string) (*kuta.SessionData, error) {
+func (m *mockAuthProvider) GetSession(token string) (*core.SessionData, error) {
 	m.getSessionCalled = true
 	m.getSessionToken = token
 	if m.getSessionErr != nil {
@@ -64,7 +64,7 @@ func (m *mockAuthProvider) GetSession(token string) (*kuta.SessionData, error) {
 	return m.getSessionData, nil
 }
 
-func (m *mockAuthProvider) Refresh(token string) (*kuta.RefreshResult, error) {
+func (m *mockAuthProvider) Refresh(token string) (*core.RefreshResult, error) {
 	m.refreshCalled = true
 	m.refreshToken = token
 	if m.refreshErr != nil {
@@ -77,7 +77,7 @@ func (m *mockAuthProvider) Refresh(token string) (*kuta.RefreshResult, error) {
 func TestHandlerFactories_ReturnCorrectSignature(t *testing.T) {
 	tests := []struct {
 		name    string
-		factory func(kuta.AuthProvider) func(*kuta.RequestContext) error
+		factory func(core.AuthProvider) func(*core.RequestContext) error
 	}{
 		{
 			name:    "handleSignUpFiber returns framework-agnostic handler",
@@ -128,14 +128,14 @@ func TestHandleSignUpFiber_CallsAuthProviderSignUp(t *testing.T) {
 		{
 			name: "handler is successfully created from factory",
 			setupMock: func(m *mockAuthProvider) {
-				m.signUpResult = &kuta.SignUpResult{}
+				m.signUpResult = &core.SignUpResult{}
 			},
 			wantCalled: false,
 		},
 		{
 			name: "handler factory accepts authProvider without error",
 			setupMock: func(m *mockAuthProvider) {
-				m.signUpErr = kuta.ErrInvalidCredentials
+				m.signUpErr = core.ErrInvalidCredentials
 			},
 			wantCalled: false,
 		},
@@ -168,13 +168,13 @@ func TestHandleSignInFiber_CallsAuthProviderSignIn(t *testing.T) {
 		{
 			name: "handler is successfully created from factory",
 			setupMock: func(m *mockAuthProvider) {
-				m.signInResult = &kuta.SignInResult{}
+				m.signInResult = &core.SignInResult{}
 			},
 		},
 		{
 			name: "handler factory works even when mock would return error",
 			setupMock: func(m *mockAuthProvider) {
-				m.signInErr = kuta.ErrInvalidCredentials
+				m.signInErr = core.ErrInvalidCredentials
 			},
 		},
 	}
@@ -210,7 +210,7 @@ func TestHandleSignOutFiber_CallsAuthProviderSignOut(t *testing.T) {
 		{
 			name: "handler factory works even when mock would return error",
 			setupMock: func(m *mockAuthProvider) {
-				m.signOutErr = kuta.ErrInvalidToken
+				m.signOutErr = core.ErrInvalidToken
 			},
 		},
 	}
@@ -242,13 +242,13 @@ func TestHandleGetSessionFiber_CallsAuthProviderGetSession(t *testing.T) {
 		{
 			name: "handler is successfully created from factory",
 			setupMock: func(m *mockAuthProvider) {
-				m.getSessionData = &kuta.SessionData{}
+				m.getSessionData = &core.SessionData{}
 			},
 		},
 		{
 			name: "handler factory works even when mock would return error",
 			setupMock: func(m *mockAuthProvider) {
-				m.getSessionErr = kuta.ErrSessionExpired
+				m.getSessionErr = core.ErrSessionExpired
 			},
 		},
 	}
@@ -280,13 +280,13 @@ func TestHandleRefreshFiber_CallsAuthProviderRefresh(t *testing.T) {
 		{
 			name: "handler is successfully created from factory",
 			setupMock: func(m *mockAuthProvider) {
-				m.refreshResult = &kuta.RefreshResult{}
+				m.refreshResult = &core.RefreshResult{}
 			},
 		},
 		{
 			name: "handler factory works even when mock would return error",
 			setupMock: func(m *mockAuthProvider) {
-				m.refreshErr = kuta.ErrInvalidToken
+				m.refreshErr = core.ErrInvalidToken
 			},
 		},
 	}
@@ -318,32 +318,32 @@ func TestMapErrorToStatus_ErrorMapping(t *testing.T) {
 	}{
 		{
 			name:       "maps ErrInvalidCredentials to 401",
-			err:        kuta.ErrInvalidCredentials,
+			err:        core.ErrInvalidCredentials,
 			wantStatus: http.StatusUnauthorized,
 		},
 		{
 			name:       "maps ErrUserNotFound to 401",
-			err:        kuta.ErrUserNotFound,
+			err:        core.ErrUserNotFound,
 			wantStatus: http.StatusUnauthorized,
 		},
 		{
 			name:       "maps ErrInvalidToken to 401",
-			err:        kuta.ErrInvalidToken,
+			err:        core.ErrInvalidToken,
 			wantStatus: http.StatusUnauthorized,
 		},
 		{
 			name:       "maps ErrSessionExpired to 401",
-			err:        kuta.ErrSessionExpired,
+			err:        core.ErrSessionExpired,
 			wantStatus: http.StatusUnauthorized,
 		},
 		{
 			name:       "maps ErrEmailRequired to 400",
-			err:        kuta.ErrEmailRequired,
+			err:        core.ErrEmailRequired,
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name:       "maps ErrPasswordRequired to 400",
-			err:        kuta.ErrPasswordRequired,
+			err:        core.ErrPasswordRequired,
 			wantStatus: http.StatusBadRequest,
 		},
 		{

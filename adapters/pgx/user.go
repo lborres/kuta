@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/lborres/kuta"
+	"github.com/lborres/kuta/core"
 )
 
-func (a *Adapter) CreateUser(user *kuta.User) error {
+func (a *Adapter) CreateUser(user *core.User) error {
 	ctx := context.Background()
 
 	query := `INSERT INTO public.users (id, email, email_verified, name, image) VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at, updated_at`
@@ -26,16 +26,16 @@ func (a *Adapter) CreateUser(user *kuta.User) error {
 	return nil
 }
 
-func (a *Adapter) GetUserByID(id string) (*kuta.User, error) {
+func (a *Adapter) GetUserByID(id string) (*core.User, error) {
 	ctx := context.Background()
 	q := `SELECT id, email, email_verified, name, image, created_at, updated_at FROM public.users WHERE id = $1`
 
-	user := &kuta.User{}
+	user := &core.User{}
 	var image *string
 	err := a.pool.QueryRow(ctx, q, id).Scan(&user.ID, &user.Email, &user.EmailVerified, &user.Name, &image, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, kuta.ErrUserNotFound
+			return nil, core.ErrUserNotFound
 		}
 		return nil, err
 	}
@@ -43,16 +43,16 @@ func (a *Adapter) GetUserByID(id string) (*kuta.User, error) {
 	return user, nil
 }
 
-func (a *Adapter) GetUserByEmail(email string) (*kuta.User, error) {
+func (a *Adapter) GetUserByEmail(email string) (*core.User, error) {
 	ctx := context.Background()
 	q := `SELECT id, email, email_verified, name, image, created_at, updated_at FROM public.users WHERE email = $1`
 
-	user := &kuta.User{}
+	user := &core.User{}
 	var image *string
 	err := a.pool.QueryRow(ctx, q, email).Scan(&user.ID, &user.Email, &user.EmailVerified, &user.Name, &image, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, kuta.ErrUserNotFound
+			return nil, core.ErrUserNotFound
 		}
 		return nil, err
 	}
@@ -60,14 +60,14 @@ func (a *Adapter) GetUserByEmail(email string) (*kuta.User, error) {
 	return user, nil
 }
 
-func (a *Adapter) UpdateUser(user *kuta.User) error {
+func (a *Adapter) UpdateUser(user *core.User) error {
 	ctx := context.Background()
 	q := `UPDATE public.users SET email = $1, email_verified = $2, name = $3, image = $4, updated_at = now() WHERE id = $5 RETURNING updated_at`
 	var updatedAt time.Time
 	err := a.pool.QueryRow(ctx, q, user.Email, user.EmailVerified, user.Name, user.Image, user.ID).Scan(&updatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return kuta.ErrUserNotFound
+			return core.ErrUserNotFound
 		}
 		return err
 	}

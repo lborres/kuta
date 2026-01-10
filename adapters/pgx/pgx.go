@@ -2,14 +2,14 @@ package pgx
 
 import (
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/lborres/kuta"
+	"github.com/lborres/kuta/core"
 )
 
 type Adapter struct {
 	pool *pgxpool.Pool
 }
 
-var _ kuta.StorageProvider = (*Adapter)(nil)
+var _ core.StorageProvider = (*Adapter)(nil)
 
 func New(pool *pgxpool.Pool) *Adapter {
 	return &Adapter{

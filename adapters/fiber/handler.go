@@ -5,15 +5,15 @@ import (
 	"net/http"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/lborres/kuta"
+	"github.com/lborres/kuta/core"
 )
 
 // handleSignUpFiber returns a handler for the sign-up endpoint
-func handleSignUpFiber(authProvider kuta.AuthProvider) func(*kuta.RequestContext) error {
-	return func(ctx *kuta.RequestContext) error {
+func handleSignUpFiber(authProvider core.AuthProvider) func(*core.RequestContext) error {
+	return func(ctx *core.RequestContext) error {
 		fctx := ctx.Request.(fiber.Ctx)
 
-		var input kuta.SignUpInput
+		var input core.SignUpInput
 		if err := fctx.Bind().Body(&input); err != nil {
 			return fctx.Status(http.StatusBadRequest).JSON(map[string]string{
 				"error": "invalid request body",
@@ -33,21 +33,18 @@ func handleSignUpFiber(authProvider kuta.AuthProvider) func(*kuta.RequestContext
 }
 
 // handleSignInFiber returns a handler for the sign-in endpoint
-func handleSignInFiber(authProvider kuta.AuthProvider) func(*kuta.RequestContext) error {
-	return func(ctx *kuta.RequestContext) error {
+func handleSignInFiber(authProvider core.AuthProvider) func(*core.RequestContext) error {
+	return func(ctx *core.RequestContext) error {
 		fctx := ctx.Request.(fiber.Ctx)
 
-		var input kuta.SignInInput
+		var input core.SignInInput
 		if err := fctx.Bind().Body(&input); err != nil {
 			return fctx.Status(http.StatusBadRequest).JSON(map[string]string{
 				"error": "invalid request body",
 			})
 		}
 
-		ipAddress := fctx.IP()
-		userAgent := fctx.Get(fiber.HeaderUserAgent)
-
-		result, err := authProvider.SignIn(input, ipAddress, userAgent)
+		result, err := authProvider.SignIn(input, fctx.IP(), fctx.Get(fiber.HeaderUserAgent))
 		if err != nil {
 			return handleAuthError(fctx, err)
 		}
@@ -57,8 +54,8 @@ func handleSignInFiber(authProvider kuta.AuthProvider) func(*kuta.RequestContext
 }
 
 // handleSignOutFiber returns a handler for the sign-out endpoint
-func handleSignOutFiber(authProvider kuta.AuthProvider) func(*kuta.RequestContext) error {
-	return func(ctx *kuta.RequestContext) error {
+func handleSignOutFiber(authProvider core.AuthProvider) func(*core.RequestContext) error {
+	return func(ctx *core.RequestContext) error {
 		fctx := ctx.Request.(fiber.Ctx)
 
 		token := extractToken(fctx)
@@ -79,8 +76,8 @@ func handleSignOutFiber(authProvider kuta.AuthProvider) func(*kuta.RequestContex
 }
 
 // handleGetSessionFiber returns a handler for the get-session endpoint
-func handleGetSessionFiber(authProvider kuta.AuthProvider) func(*kuta.RequestContext) error {
-	return func(ctx *kuta.RequestContext) error {
+func handleGetSessionFiber(authProvider core.AuthProvider) func(*core.RequestContext) error {
+	return func(ctx *core.RequestContext) error {
 		fctx := ctx.Request.(fiber.Ctx)
 
 		token := extractToken(fctx)
@@ -100,8 +97,8 @@ func handleGetSessionFiber(authProvider kuta.AuthProvider) func(*kuta.RequestCon
 }
 
 // handleRefreshFiber returns a handler for the refresh endpoint
-func handleRefreshFiber(authProvider kuta.AuthProvider) func(*kuta.RequestContext) error {
-	return func(ctx *kuta.RequestContext) error {
+func handleRefreshFiber(authProvider core.AuthProvider) func(*core.RequestContext) error {
+	return func(ctx *core.RequestContext) error {
 		fctx := ctx.Request.(fiber.Ctx)
 
 		token := extractToken(fctx)
@@ -148,17 +145,17 @@ func mapErrorToStatus(err error) int {
 	}
 
 	switch {
-	case errors.Is(err, kuta.ErrInvalidCredentials),
-		errors.Is(err, kuta.ErrUserNotFound),
-		errors.Is(err, kuta.ErrInvalidToken),
-		errors.Is(err, kuta.ErrSessionExpired):
+	case errors.Is(err, core.ErrInvalidCredentials),
+		errors.Is(err, core.ErrUserNotFound),
+		errors.Is(err, core.ErrInvalidToken),
+		errors.Is(err, core.ErrSessionExpired):
 		return http.StatusUnauthorized
 
-	case errors.Is(err, kuta.ErrEmailRequired),
-		errors.Is(err, kuta.ErrPasswordRequired),
-		errors.Is(err, kuta.ErrPasswordTooShort),
-		errors.Is(err, kuta.ErrPasswordTooLong),
-		errors.Is(err, kuta.ErrInvalidEmail):
+	case errors.Is(err, core.ErrEmailRequired),
+		errors.Is(err, core.ErrPasswordRequired),
+		errors.Is(err, core.ErrPasswordTooShort),
+		errors.Is(err, core.ErrPasswordTooLong),
+		errors.Is(err, core.ErrInvalidEmail):
 		return http.StatusBadRequest
 
 	default:

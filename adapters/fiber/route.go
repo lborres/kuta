@@ -4,22 +4,22 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/lborres/kuta"
+	"github.com/lborres/kuta/core"
 	"github.com/lborres/kuta/services"
 )
 
 type Adapter struct {
 	app     *fiber.App
-	handler kuta.AuthProvider
+	handler core.AuthProvider
 }
 
-var _ kuta.HTTPProvider = (*Adapter)(nil)
+var _ core.HTTPProvider = (*Adapter)(nil)
 
 func New(app *fiber.App) *Adapter {
 	return &Adapter{app: app}
 }
 
-func (a *Adapter) RegisterRoutes(service kuta.AuthProvider, basePath string, _ time.Duration) error {
+func (a *Adapter) RegisterRoutes(service core.AuthProvider, basePath string, _ time.Duration) error {
 	a.handler = service
 
 	// Create endpoint registry with our handler factories
@@ -69,7 +69,7 @@ func (a *Adapter) RegisterRoutes(service kuta.AuthProvider, basePath string, _ t
 	}
 
 	// Check if handler supports dynamic endpoint registration (plugins)
-	if provider, ok := service.(kuta.EndpointProvider); ok {
+	if provider, ok := service.(core.EndpointProvider); ok {
 		// Use dynamic endpoint registration for plugins
 		return a.registerDynamicEndpoints(provider, basePath)
 	}
@@ -78,7 +78,7 @@ func (a *Adapter) RegisterRoutes(service kuta.AuthProvider, basePath string, _ t
 }
 
 // registerDynamicEndpoints registers endpoints provided by an EndpointProvider
-func (a *Adapter) registerDynamicEndpoints(provider kuta.EndpointProvider, basePath string) error {
+func (a *Adapter) registerDynamicEndpoints(provider core.EndpointProvider, basePath string) error {
 	api := a.app.Group(basePath)
 	endpoints := provider.GetEndpoints()
 
@@ -106,10 +106,10 @@ func (a *Adapter) registerDynamicEndpoints(provider kuta.EndpointProvider, baseP
 }
 
 // adaptHandler converts a framework-agnostic endpoint handler to a Fiber handler
-func (a *Adapter) adaptHandler(endpoint *kuta.Endpoint) fiber.Handler {
+func (a *Adapter) adaptHandler(endpoint *core.Endpoint) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		// Create RequestContext
-		ctx := &kuta.RequestContext{
+		ctx := &core.RequestContext{
 			Request: c,
 			Auth:    a.handler,
 		}

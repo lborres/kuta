@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/lborres/kuta"
+	"github.com/lborres/kuta/core"
 )
 
-func (a *Adapter) CreateAccount(acc *kuta.Account) error {
+func (a *Adapter) CreateAccount(acc *core.Account) error {
 	ctx := context.Background()
 
 	query := `INSERT INTO public.accounts (id, user_id, provider_id, account_id, password, access_token, refresh_token, expires_at)
@@ -29,19 +29,19 @@ func (a *Adapter) CreateAccount(acc *kuta.Account) error {
 	return nil
 }
 
-func (a *Adapter) GetAccountByID(id string) (*kuta.Account, error) {
+func (a *Adapter) GetAccountByID(id string) (*core.Account, error) {
 	ctx := context.Background()
 	query := `SELECT id, user_id, provider_id, account_id, password, access_token, refresh_token, expires_at, created_at, updated_at
 	          FROM public.accounts WHERE id = $1`
 
-	acc := &kuta.Account{}
+	acc := &core.Account{}
 	err := a.pool.QueryRow(ctx, query, id).Scan(
 		&acc.ID, &acc.UserID, &acc.ProviderID, &acc.AccountID, &acc.Password, &acc.AccessToken, &acc.RefreshToken, &acc.ExpiresAt, &acc.CreatedAt, &acc.UpdatedAt,
 	)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, kuta.ErrUserNotFound
+			return nil, core.ErrUserNotFound
 		}
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func (a *Adapter) GetAccountByID(id string) (*kuta.Account, error) {
 	return acc, nil
 }
 
-func (a *Adapter) GetAccountByUserAndProvider(userID, providerID string) ([]*kuta.Account, error) {
+func (a *Adapter) GetAccountByUserAndProvider(userID, providerID string) ([]*core.Account, error) {
 	ctx := context.Background()
 	query := `SELECT id, user_id, provider_id, account_id, password, access_token, refresh_token, expires_at, created_at, updated_at
 	          FROM public.accounts WHERE user_id = $1 AND provider_id = $2`
@@ -60,9 +60,9 @@ func (a *Adapter) GetAccountByUserAndProvider(userID, providerID string) ([]*kut
 	}
 	defer rows.Close()
 
-	var accounts []*kuta.Account
+	var accounts []*core.Account
 	for rows.Next() {
-		acc := &kuta.Account{}
+		acc := &core.Account{}
 		err := rows.Scan(
 			&acc.ID, &acc.UserID, &acc.ProviderID, &acc.AccountID, &acc.Password, &acc.AccessToken, &acc.RefreshToken, &acc.ExpiresAt, &acc.CreatedAt, &acc.UpdatedAt,
 		)
@@ -79,7 +79,7 @@ func (a *Adapter) GetAccountByUserAndProvider(userID, providerID string) ([]*kut
 	return accounts, nil
 }
 
-func (a *Adapter) UpdateAccount(acc *kuta.Account) error {
+func (a *Adapter) UpdateAccount(acc *core.Account) error {
 	ctx := context.Background()
 	query := `UPDATE public.accounts SET account_id = $1, password = $2, access_token = $3, refresh_token = $4, expires_at = $5, updated_at = now()
 	          WHERE id = $6 RETURNING updated_at`
@@ -91,7 +91,7 @@ func (a *Adapter) UpdateAccount(acc *kuta.Account) error {
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return kuta.ErrUserNotFound
+			return core.ErrUserNotFound
 		}
 		return err
 	}

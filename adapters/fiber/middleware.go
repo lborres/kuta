@@ -2,18 +2,18 @@ package fiber
 
 import (
 	"github.com/gofiber/fiber/v3"
-	"github.com/lborres/kuta"
+	"github.com/lborres/kuta/core"
 )
 
 // BuildProtectedMiddleware creates a Fiber middleware that validates auth tokens
 // and stores user/session data in the context for downstream handlers.
-func (a *Adapter) BuildProtectedMiddleware(authProvider kuta.AuthProvider) interface{} {
+func (a *Adapter) BuildProtectedMiddleware(authProvider core.AuthProvider) interface{} {
 	return func(c fiber.Ctx) error {
 		// Extract and validate token from Authorization header
 		token := extractToken(c)
 		if token == "" {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": kuta.ErrMissingAuthHeader.Error(),
+				"error": core.ErrMissingAuthHeader.Error(),
 			})
 		}
 
