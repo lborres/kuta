@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -90,6 +91,8 @@ func (c *InMemoryCache) Set(tokenHash string, session *core.Session) error {
 		session:  session,
 		cachedAt: time.Now(),
 	}
+
+	log.Printf("[cache] current in-memory len: %d\n", len(c.cache))
 
 	atomic.AddInt64(&c.sets, 1)
 	return nil
