@@ -1,8 +1,6 @@
 package fiber
 
 import (
-	"errors"
-	"log"
 	"net/http"
 	"time"
 
@@ -10,224 +8,194 @@ import (
 	"github.com/lborres/kuta/core"
 )
 
-var (
-	cookieConfig  *core.CookieConfig
-	sessionConfig *core.SessionConfig
-)
-
-func setAuthCookie(fctx fiber.Ctx, cookiConfig *core.CookieConfig, sessionConfig *core.SessionConfig, token string) {
-	if cookiConfig == nil || cookiConfig.SessionToken.Name == "" {
-		return
-	}
-
-	expireTime := time.Now().Add(sessionConfig.ExpiresIn)
-	maxAge := int(sessionConfig.ExpiresIn.Seconds())
-
-	cookie := &fiber.Cookie{
-		Name:     cookiConfig.SessionToken.Name,
-		Value:    token,
-		HTTPOnly: cookiConfig.SessionToken.Attributes.HTTPOnly,
-		Secure:   cookiConfig.SessionToken.Attributes.Secure,
-		SameSite: cookiConfig.SessionToken.Attributes.SameSite,
-		Path:     cookiConfig.SessionToken.Attributes.Path,
-		Expires:  expireTime,
-		MaxAge:   maxAge,
-	}
-
-	fctx.Cookie(cookie)
+// authHandlers holds dependencies for auth endpoint handlers
+type authHandlers struct {
+	provider   core.AuthProvider
+	sessionCfg *core.SessionConfig
 }
 
-func clearAuthCookie(fctx fiber.Ctx, cookiConfig *core.CookieConfig) {
-	if cookiConfig == nil || cookiConfig.SessionToken.Name == "" {
-		return
+func (h *authHandlers) cookieCfg() *core.CookieConfig {
+	if h.sessionCfg == nil {
+		return nil
 	}
-
-	c := &fiber.Cookie{
-		Name:     cookiConfig.SessionToken.Name,
-		Value:    "",
-		Path:     cookiConfig.SessionToken.Attributes.Path,
-		Expires:  time.Now().Add(-1 * time.Hour),
-		MaxAge:   -1,
-		HTTPOnly: cookiConfig.SessionToken.Attributes.HTTPOnly,
-		Secure:   cookiConfig.SessionToken.Attributes.Secure,
-		SameSite: cookiConfig.SessionToken.Attributes.SameSite,
-	}
-	fctx.Cookie(c)
+	return h.sessionCfg.CookieConfig
 }
 
-// handleSignUpFiber returns a handler for the sign-up endpoint
-func handleSignUpFiber(authProvider core.AuthProvider) func(*core.RequestContext) error {
-	return func(ctx *core.RequestContext) error {
-		fctx := ctx.Request.(fiber.Ctx)
-
-		var input core.SignUpInput
-		if err := fctx.Bind().Body(&input); err != nil {
-			return fctx.Status(http.StatusBadRequest).JSON(map[string]string{
-				"error": "invalid request body",
-			})
-		}
-
-		ipAddress := fctx.IP()
-		userAgent := fctx.Get(fiber.HeaderUserAgent)
-
-		result, err := authProvider.SignUp(input, ipAddress, userAgent)
-		if err != nil {
-			return handleAuthError(fctx, err)
-		}
-
-		if cookieConfig != nil && sessionConfig != nil {
-			setAuthCookie(fctx, cookieConfig, sessionConfig, result.Token)
-		}
-
-		return fctx.Status(http.StatusCreated).JSON(result)
-	}
-}
-
-// handleSignInFiber returns a handler for the sign-in endpoint
-func handleSignInFiber(authProvider core.AuthProvider) func(*core.RequestContext) error {
-	return func(ctx *core.RequestContext) error {
-		fctx := ctx.Request.(fiber.Ctx)
-
-		var input core.SignInInput
-		if err := fctx.Bind().Body(&input); err != nil {
-			return fctx.Status(http.StatusBadRequest).JSON(map[string]string{
-				"error": "invalid request body",
-			})
-		}
-
-		result, err := authProvider.SignIn(input, fctx.IP(), fctx.Get(fiber.HeaderUserAgent))
-		if err != nil {
-			return handleAuthError(fctx, err)
-		}
-
-		if cookieConfig != nil && sessionConfig != nil {
-			log.Println("set cookie")
-			setAuthCookie(fctx, cookieConfig, sessionConfig, result.Token)
-		}
-
-		return fctx.Status(http.StatusOK).JSON(result)
-	}
-}
-
-// handleSignOutFiber returns a handler for the sign-out endpoint
-func handleSignOutFiber(authProvider core.AuthProvider) func(*core.RequestContext) error {
-	return func(ctx *core.RequestContext) error {
-		fctx := ctx.Request.(fiber.Ctx)
-
-		token := extractToken(fctx)
-		if token == "" {
-			return fctx.Status(http.StatusUnauthorized).JSON(map[string]string{
-				"error": "missing token",
-			})
-		}
-
-		if err := authProvider.SignOut(token); err != nil {
-			return handleAuthError(fctx, err)
-		}
-
-		if cookieConfig != nil {
-			clearAuthCookie(fctx, cookieConfig)
-		}
-
-		return fctx.Status(http.StatusOK).JSON(map[string]string{
-			"message": "signed out successfully",
+func (h *authHandlers) signUp(c fiber.Ctx) error {
+	var input core.SignUpInput
+	if err := c.Bind().Body(&input); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(map[string]string{
+			"error": "invalid request body",
 		})
 	}
-}
 
-// handleGetSessionFiber returns a handler for the get-session endpoint
-func handleGetSessionFiber(authProvider core.AuthProvider) func(*core.RequestContext) error {
-	return func(ctx *core.RequestContext) error {
-		fctx := ctx.Request.(fiber.Ctx)
-
-		token := extractToken(fctx)
-		if token == "" {
-			return fctx.Status(http.StatusUnauthorized).JSON(map[string]string{
-				"error": "missing token",
-			})
-		}
-
-		session, err := authProvider.GetSession(token)
-		if err != nil {
-			return handleAuthError(fctx, err)
-		}
-
-		return fctx.Status(http.StatusOK).JSON(session)
-	}
-}
-
-// handleRefreshFiber returns a handler for the refresh endpoint
-func handleRefreshFiber(authProvider core.AuthProvider) func(*core.RequestContext) error {
-	return func(ctx *core.RequestContext) error {
-		fctx := ctx.Request.(fiber.Ctx)
-
-		token := extractToken(fctx)
-		if token == "" {
-			return fctx.Status(http.StatusUnauthorized).JSON(map[string]string{
-				"error": "missing token",
-			})
-		}
-
-		result, err := authProvider.Refresh(token)
-		if err != nil {
-			return handleAuthError(fctx, err)
-		}
-
-		if cookieConfig != nil && sessionConfig != nil {
-			setAuthCookie(fctx, cookieConfig, sessionConfig, result.Token)
-		}
-
-		return fctx.Status(http.StatusOK).JSON(result)
-	}
-}
-
-// extractToken extracts the authentication token from the request.
-// Checks Authorization header (Bearer token) first, then falls back to cookie.
-func extractToken(c fiber.Ctx) string {
-	// Try Bearer token first
-	authHeader := c.Get(fiber.HeaderAuthorization)
-	if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
-		return authHeader[7:]
+	result, err := h.provider.SignUp(input, c.IP(), c.Get(fiber.HeaderUserAgent))
+	if err != nil {
+		return h.authError(c, err)
 	}
 
-	// Fall back to configured cookie name or default
-	name := core.DefaultSessionTokenName
-	if cookieConfig != nil && cookieConfig.SessionToken.Name != "" {
-		name = cookieConfig.SessionToken.Name
-	}
-
-	// Fall back to cookie
-	return c.Cookies(name)
+	h.setAuthCookie(c, result.Token)
+	return c.Status(http.StatusCreated).JSON(result)
 }
 
-// handleAuthError maps authentication errors to appropriate HTTP responses
-func handleAuthError(c fiber.Ctx, err error) error {
+func (h *authHandlers) signIn(c fiber.Ctx) error {
+	var input core.SignInInput
+	if err := c.Bind().Body(&input); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(map[string]string{
+			"error": "invalid request body",
+		})
+	}
+
+	result, err := h.provider.SignIn(input, c.IP(), c.Get(fiber.HeaderUserAgent))
+	if err != nil {
+		return h.authError(c, err)
+	}
+
+	h.setAuthCookie(c, result.Token)
+	return c.Status(http.StatusOK).JSON(result)
+}
+
+func (h *authHandlers) signOut(c fiber.Ctx) error {
+	token := h.extractToken(c)
+	if token == "" {
+		return c.Status(http.StatusUnauthorized).JSON(map[string]string{
+			"error": "missing token",
+		})
+	}
+
+	if err := h.provider.SignOut(token); err != nil {
+		return h.authError(c, err)
+	}
+
+	h.clearAuthCookie(c)
+	return c.Status(http.StatusOK).JSON(map[string]string{
+		"message": "signed out successfully",
+	})
+}
+
+func (h *authHandlers) getSession(c fiber.Ctx) error {
+	token := h.extractToken(c)
+	if token == "" {
+		return c.Status(http.StatusUnauthorized).JSON(map[string]string{
+			"error": "missing token",
+		})
+	}
+
+	session, err := h.provider.GetSession(token)
+	if err != nil {
+		return h.authError(c, err)
+	}
+
+	return c.Status(http.StatusOK).JSON(session)
+}
+
+func (h *authHandlers) refresh(c fiber.Ctx) error {
+	token := h.extractToken(c)
+	if token == "" {
+		return c.Status(http.StatusUnauthorized).JSON(map[string]string{
+			"error": "missing token",
+		})
+	}
+
+	result, err := h.provider.Refresh(token)
+	if err != nil {
+		return h.authError(c, err)
+	}
+
+	h.setAuthCookie(c, result.Token)
+	return c.Status(http.StatusOK).JSON(result)
+}
+
+// --- Helper methods ---
+
+func (h *authHandlers) extractToken(c fiber.Ctx) string {
+	return extractToken(c, h.sessionCfg)
+}
+
+func (h *authHandlers) authError(c fiber.Ctx, err error) error {
 	status := mapErrorToStatus(err)
 	return c.Status(status).JSON(map[string]string{
 		"error": err.Error(),
 	})
 }
 
-// mapErrorToStatus maps kuta error types to HTTP status codes
+func (h *authHandlers) setAuthCookie(c fiber.Ctx, token string) {
+	cfg := h.cookieCfg()
+	if cfg == nil || cfg.SessionToken.Name == "" || h.sessionCfg == nil {
+		return
+	}
+
+	c.Cookie(&fiber.Cookie{
+		Name:     cfg.SessionToken.Name,
+		Value:    token,
+		HTTPOnly: cfg.SessionToken.Attributes.HTTPOnly,
+		Secure:   cfg.SessionToken.Attributes.Secure,
+		SameSite: cfg.SessionToken.Attributes.SameSite,
+		Path:     cfg.SessionToken.Attributes.Path,
+		Expires:  time.Now().Add(h.sessionCfg.ExpiresIn),
+		MaxAge:   int(h.sessionCfg.ExpiresIn.Seconds()),
+	})
+}
+
+func (h *authHandlers) clearAuthCookie(c fiber.Ctx) {
+	cfg := h.cookieCfg()
+	if cfg == nil || cfg.SessionToken.Name == "" {
+		return
+	}
+
+	c.Cookie(&fiber.Cookie{
+		Name:     cfg.SessionToken.Name,
+		Value:    "",
+		Path:     cfg.SessionToken.Attributes.Path,
+		Expires:  time.Now().Add(-time.Hour),
+		MaxAge:   -1,
+		HTTPOnly: cfg.SessionToken.Attributes.HTTPOnly,
+		Secure:   cfg.SessionToken.Attributes.Secure,
+		SameSite: cfg.SessionToken.Attributes.SameSite,
+	})
+}
+
+// --- Package-level helpers ---
+
+// extractToken extracts auth token from Authorization header or cookie
+func extractToken(c fiber.Ctx, sessionCfg *core.SessionConfig) string {
+	// Try Bearer token first
+	authHeader := c.Get(fiber.HeaderAuthorization)
+	if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+		return authHeader[7:]
+	}
+
+	// Fall back to cookie
+	name := core.DefaultSessionTokenName
+	if sessionCfg != nil && sessionCfg.CookieConfig != nil && sessionCfg.CookieConfig.SessionToken.Name != "" {
+		name = sessionCfg.CookieConfig.SessionToken.Name
+	}
+	return c.Cookies(name)
+}
+
+// mapErrorToStatus converts domain errors to HTTP status codes
 func mapErrorToStatus(err error) int {
 	if err == nil {
 		return http.StatusOK
 	}
 
-	switch {
-	case errors.Is(err, core.ErrInvalidCredentials),
-		errors.Is(err, core.ErrUserNotFound),
-		errors.Is(err, core.ErrInvalidToken),
-		errors.Is(err, core.ErrSessionNotFound),
-		errors.Is(err, core.ErrSessionExpired):
+	switch err {
+	case core.ErrInvalidCredentials,
+		core.ErrUserNotFound,
+		core.ErrInvalidToken,
+		core.ErrSessionNotFound,
+		core.ErrSessionExpired:
 		return http.StatusUnauthorized
 
-	case errors.Is(err, core.ErrEmailRequired),
-		errors.Is(err, core.ErrPasswordRequired),
-		errors.Is(err, core.ErrPasswordTooShort),
-		errors.Is(err, core.ErrPasswordTooLong),
-		errors.Is(err, core.ErrInvalidEmail):
+	case core.ErrEmailRequired,
+		core.ErrPasswordRequired,
+		core.ErrPasswordTooShort,
+		core.ErrPasswordTooLong,
+		core.ErrInvalidEmail:
 		return http.StatusBadRequest
+
+	case core.ErrUserExists:
+		return http.StatusConflict
 
 	default:
 		return http.StatusInternalServerError

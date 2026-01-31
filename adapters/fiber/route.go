@@ -2,126 +2,71 @@ package fiber
 
 import (
 	"github.com/gofiber/fiber/v3"
+	"github.com/lborres/kuta/api"
 	"github.com/lborres/kuta/core"
-	"github.com/lborres/kuta/services"
 )
 
+// Adapter integrates kuta authentication with Fiber
 type Adapter struct {
-	app     *fiber.App
-	handler core.AuthProvider
+	app        *fiber.App
+	provider   core.AuthProvider
+	sessionCfg *core.SessionConfig
+	registry   *api.EndpointRegistry
 }
 
 var _ core.HTTPProvider = (*Adapter)(nil)
 
+// New creates a Fiber adapter
 func New(app *fiber.App) *Adapter {
-	return &Adapter{app: app}
+	return &Adapter{
+		app:      app,
+		registry: api.NewEndpointRegistry(),
+	}
 }
 
-func (a *Adapter) RegisterRoutes(service core.AuthProvider, basePath string, sessionCfg *core.SessionConfig) error {
-	a.handler = service
+// RegisterRoutes registers all auth endpoints under basePath
+func (a *Adapter) RegisterRoutes(provider core.AuthProvider, basePath string, sessionCfg *core.SessionConfig) error {
+	a.provider = provider
+	a.sessionCfg = sessionCfg
 
-	// Wire package-level vars for cookie handling in handlers
-	if sessionCfg != nil {
-		sessionConfig = sessionCfg
-		cookieConfig = sessionCfg.CookieConfig
-	}
-	// Create endpoint registry with our handler factories
-	registry := services.NewEndpointRegistry()
+	h := &authHandlers{provider: provider, sessionCfg: sessionCfg}
+	group := a.app.Group(basePath)
 
-	// Wire handler factories to endpoints
-	endpoints := registry.Endpoints()
-	for i, endpoint := range endpoints {
-		switch endpoint.Metadata.OperationID {
-		case "signUpWithEmailAndPassword":
-			endpoints[i].Handler = handleSignUpFiber(service)
-		case "signInWithEmailAndPassword":
-			endpoints[i].Handler = handleSignInFiber(service)
-		case "signOut":
-			endpoints[i].Handler = handleSignOutFiber(service)
-		case "getSession":
-			endpoints[i].Handler = handleGetSessionFiber(service)
-		case "refreshToken":
-			endpoints[i].Handler = handleRefreshFiber(service)
-		}
+	// Map handlers to endpoints from registry
+	handlers := map[string]fiber.Handler{
+		"POST:/sign-up":  h.signUp,
+		"POST:/sign-in":  h.signIn,
+		"POST:/sign-out": h.signOut,
+		"GET:/session":   h.getSession,
+		"POST:/refresh":  h.refresh,
 	}
 
-	// Register all endpoints with Fiber
-	api := a.app.Group(basePath)
-
-	for _, endpoint := range endpoints {
-		if endpoint.Handler == nil {
-			continue // Skip endpoints without handlers
+	// Register routes from registry
+	for _, ep := range a.registry.Endpoints() {
+		key := ep.Method + ":" + ep.Path
+		handler, ok := handlers[key]
+		if !ok {
+			continue
 		}
 
-		// Convert the framework-agnostic handler to a Fiber handler
-		fiberHandler := a.adaptHandler(endpoint)
-
-		// Register based on HTTP method
-		switch endpoint.Method {
+		switch ep.Method {
 		case "GET":
-			api.Get(endpoint.Path, fiberHandler)
+			group.Get(ep.Path, handler)
 		case "POST":
-			api.Post(endpoint.Path, fiberHandler)
+			group.Post(ep.Path, handler)
 		case "PUT":
-			api.Put(endpoint.Path, fiberHandler)
+			group.Put(ep.Path, handler)
 		case "DELETE":
-			api.Delete(endpoint.Path, fiberHandler)
+			group.Delete(ep.Path, handler)
 		case "PATCH":
-			api.Patch(endpoint.Path, fiberHandler)
-		}
-	}
-
-	// Check if handler supports dynamic endpoint registration (plugins)
-	if provider, ok := service.(core.EndpointProvider); ok {
-		// Use dynamic endpoint registration for plugins
-		return a.registerDynamicEndpoints(provider, basePath)
-	}
-
-	return nil
-}
-
-// registerDynamicEndpoints registers endpoints provided by an EndpointProvider
-func (a *Adapter) registerDynamicEndpoints(provider core.EndpointProvider, basePath string) error {
-	api := a.app.Group(basePath)
-	endpoints := provider.GetEndpoints()
-
-	for _, endpoint := range endpoints {
-		ep := endpoint // capture loop variable
-		// Convert the framework-agnostic handler to a Fiber handler
-		fiberHandler := a.adaptHandler(&ep)
-
-		// Register based on HTTP method
-		switch endpoint.Method {
-		case "GET":
-			api.Get(endpoint.Path, fiberHandler)
-		case "POST":
-			api.Post(endpoint.Path, fiberHandler)
-		case "PUT":
-			api.Put(endpoint.Path, fiberHandler)
-		case "DELETE":
-			api.Delete(endpoint.Path, fiberHandler)
-		case "PATCH":
-			api.Patch(endpoint.Path, fiberHandler)
+			group.Patch(ep.Path, handler)
 		}
 	}
 
 	return nil
 }
 
-// adaptHandler converts a framework-agnostic endpoint handler to a Fiber handler
-func (a *Adapter) adaptHandler(endpoint *core.Endpoint) fiber.Handler {
-	return func(c fiber.Ctx) error {
-		// Create RequestContext
-		ctx := &core.RequestContext{
-			Request: c,
-			Auth:    a.handler,
-		}
-
-		// Call the endpoint handler
-		if err := endpoint.Handler(ctx); err != nil {
-			return err
-		}
-
-		return nil
-	}
+// Endpoints returns the endpoint registry for OpenAPI generation
+func (a *Adapter) Endpoints() *api.EndpointRegistry {
+	return a.registry
 }

@@ -6,18 +6,16 @@ import (
 )
 
 // BuildProtectedMiddleware creates a Fiber middleware that validates auth tokens
-// and stores user/session data in the context for downstream handlers.
+// and stores user/session data in the context for downstream handlers
 func (a *Adapter) BuildProtectedMiddleware(authProvider core.AuthProvider) interface{} {
 	return func(c fiber.Ctx) error {
-		// Extract and validate token from Authorization header
-		token := extractToken(c)
+		token := extractToken(c, a.sessionCfg)
 		if token == "" {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": core.ErrMissingAuthHeader.Error(),
 			})
 		}
 
-		// Validate token and retrieve session data
 		sessionData, err := authProvider.GetSession(token)
 		if err != nil {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -25,7 +23,6 @@ func (a *Adapter) BuildProtectedMiddleware(authProvider core.AuthProvider) inter
 			})
 		}
 
-		// Store user and session in context for downstream handlers
 		c.Locals("user", sessionData.User)
 		c.Locals("session", sessionData.Session)
 

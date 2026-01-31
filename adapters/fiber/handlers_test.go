@@ -73,239 +73,44 @@ func (m *mockAuthProvider) Refresh(token string) (*core.RefreshResult, error) {
 	return m.refreshResult, nil
 }
 
-// Requirement: Handler factories return functions matching the framework-agnostic signature
-func TestHandlerFactories_ReturnCorrectSignature(t *testing.T) {
-	tests := []struct {
-		name    string
-		factory func(core.AuthProvider) func(*core.RequestContext) error
-	}{
-		{
-			name:    "handleSignUpFiber returns framework-agnostic handler",
-			factory: handleSignUpFiber,
-		},
-		{
-			name:    "handleSignInFiber returns framework-agnostic handler",
-			factory: handleSignInFiber,
-		},
-		{
-			name:    "handleSignOutFiber returns framework-agnostic handler",
-			factory: handleSignOutFiber,
-		},
-		{
-			name:    "handleGetSessionFiber returns framework-agnostic handler",
-			factory: handleGetSessionFiber,
-		},
-		{
-			name:    "handleRefreshFiber returns framework-agnostic handler",
-			factory: handleRefreshFiber,
-		},
+// Requirement: authHandlers struct can be instantiated with provider and config
+func TestAuthHandlers_Creation(t *testing.T) {
+	mock := &mockAuthProvider{}
+
+	h := &authHandlers{
+		provider:   mock,
+		sessionCfg: nil,
 	}
 
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			// Arrange
-			mock := &mockAuthProvider{}
-
-			// Act
-			handler := test.factory(mock)
-
-			// Assert
-			if handler == nil {
-				t.Fatalf("Handler factory should return non-nil function")
-			}
-		})
+	if h.provider == nil {
+		t.Error("authHandlers should hold provider reference")
 	}
 }
 
-// Requirement: handleSignUpFiber calls authProvider.SignUp when provided valid context
-func TestHandleSignUpFiber_CallsAuthProviderSignUp(t *testing.T) {
-	tests := []struct {
-		name       string
-		setupMock  func(*mockAuthProvider)
-		wantCalled bool
-	}{
-		{
-			name: "handler is successfully created from factory",
-			setupMock: func(m *mockAuthProvider) {
-				m.signUpResult = &core.SignUpResult{}
-			},
-			wantCalled: false,
-		},
-		{
-			name: "handler factory accepts authProvider without error",
-			setupMock: func(m *mockAuthProvider) {
-				m.signUpErr = core.ErrInvalidCredentials
-			},
-			wantCalled: false,
-		},
+// Requirement: authHandlers.cookieCfg returns nil when sessionCfg is nil
+func TestAuthHandlers_CookieCfg_ReturnsNilWhenNoSessionConfig(t *testing.T) {
+	h := &authHandlers{
+		provider:   &mockAuthProvider{},
+		sessionCfg: nil,
 	}
 
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			// Arrange
-			mock := &mockAuthProvider{}
-			test.setupMock(mock)
-
-			// Act: Create the handler (factory pattern)
-			handler := handleSignUpFiber(mock)
-
-			// Assert: Handler was created successfully
-			if handler == nil {
-				t.Errorf("handleSignUpFiber factory should return non-nil handler")
-			}
-		})
+	if h.cookieCfg() != nil {
+		t.Error("cookieCfg should return nil when sessionCfg is nil")
 	}
 }
 
-// Requirement: handleSignInFiber returns handler from factory
-func TestHandleSignInFiber_CallsAuthProviderSignIn(t *testing.T) {
-	tests := []struct {
-		name      string
-		setupMock func(*mockAuthProvider)
-	}{
-		{
-			name: "handler is successfully created from factory",
-			setupMock: func(m *mockAuthProvider) {
-				m.signInResult = &core.SignInResult{}
-			},
-		},
-		{
-			name: "handler factory works even when mock would return error",
-			setupMock: func(m *mockAuthProvider) {
-				m.signInErr = core.ErrInvalidCredentials
-			},
+// Requirement: authHandlers.cookieCfg returns cookie config when sessionCfg exists
+func TestAuthHandlers_CookieCfg_ReturnsCookieConfigWhenPresent(t *testing.T) {
+	expected := &core.CookieConfig{}
+	h := &authHandlers{
+		provider: &mockAuthProvider{},
+		sessionCfg: &core.SessionConfig{
+			CookieConfig: expected,
 		},
 	}
 
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			// Arrange
-			mock := &mockAuthProvider{}
-			test.setupMock(mock)
-
-			// Act: Create the handler (factory pattern)
-			handler := handleSignInFiber(mock)
-
-			// Assert: Handler was created successfully
-			if handler == nil {
-				t.Errorf("handleSignInFiber factory should return non-nil handler")
-			}
-		})
-	}
-}
-
-// Requirement: handleSignOutFiber returns handler from factory
-func TestHandleSignOutFiber_CallsAuthProviderSignOut(t *testing.T) {
-	tests := []struct {
-		name      string
-		setupMock func(*mockAuthProvider)
-	}{
-		{
-			name:      "handler is successfully created from factory",
-			setupMock: func(m *mockAuthProvider) {},
-		},
-		{
-			name: "handler factory works even when mock would return error",
-			setupMock: func(m *mockAuthProvider) {
-				m.signOutErr = core.ErrInvalidToken
-			},
-		},
-	}
-
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			// Arrange
-			mock := &mockAuthProvider{}
-			test.setupMock(mock)
-
-			// Act: Create the handler (factory pattern)
-			handler := handleSignOutFiber(mock)
-
-			// Assert: Handler was created successfully
-			if handler == nil {
-				t.Errorf("handleSignOutFiber factory should return non-nil handler")
-			}
-		})
-	}
-}
-
-// Requirement: handleGetSessionFiber returns handler from factory
-func TestHandleGetSessionFiber_CallsAuthProviderGetSession(t *testing.T) {
-	tests := []struct {
-		name      string
-		setupMock func(*mockAuthProvider)
-	}{
-		{
-			name: "handler is successfully created from factory",
-			setupMock: func(m *mockAuthProvider) {
-				m.getSessionData = &core.SessionData{}
-			},
-		},
-		{
-			name: "handler factory works even when mock would return error",
-			setupMock: func(m *mockAuthProvider) {
-				m.getSessionErr = core.ErrSessionExpired
-			},
-		},
-	}
-
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			// Arrange
-			mock := &mockAuthProvider{}
-			test.setupMock(mock)
-
-			// Act: Create the handler (factory pattern)
-			handler := handleGetSessionFiber(mock)
-
-			// Assert: Handler was created successfully
-			if handler == nil {
-				t.Errorf("handleGetSessionFiber factory should return non-nil handler")
-			}
-		})
-	}
-}
-
-// Requirement: handleRefreshFiber returns handler from factory
-func TestHandleRefreshFiber_CallsAuthProviderRefresh(t *testing.T) {
-	tests := []struct {
-		name      string
-		setupMock func(*mockAuthProvider)
-	}{
-		{
-			name: "handler is successfully created from factory",
-			setupMock: func(m *mockAuthProvider) {
-				m.refreshResult = &core.RefreshResult{}
-			},
-		},
-		{
-			name: "handler factory works even when mock would return error",
-			setupMock: func(m *mockAuthProvider) {
-				m.refreshErr = core.ErrInvalidToken
-			},
-		},
-	}
-
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			// Arrange
-			mock := &mockAuthProvider{}
-			test.setupMock(mock)
-
-			// Act: Create the handler (factory pattern)
-			handler := handleRefreshFiber(mock)
-
-			// Assert: Handler was created successfully
-			if handler == nil {
-				t.Errorf("handleRefreshFiber factory should return non-nil handler")
-			}
-		})
+	if h.cookieCfg() != expected {
+		t.Error("cookieCfg should return CookieConfig from sessionCfg")
 	}
 }
 
