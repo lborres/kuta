@@ -191,6 +191,7 @@ func mapErrorToStatus(err error) int {
 		core.ErrPasswordRequired,
 		core.ErrPasswordTooShort,
 		core.ErrPasswordTooLong,
+		core.ErrPasswordComplexity,
 		core.ErrInvalidEmail:
 		return http.StatusBadRequest
 

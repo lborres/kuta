@@ -1,11 +1,76 @@
 package services
 
 import (
+	"regexp"
 	"time"
 
 	"github.com/lborres/kuta/core"
 	"github.com/lborres/kuta/pkg/crypto"
 )
+
+const (
+	minPasswordLength = 8
+	maxPasswordLength = 128
+)
+
+// Simple email validation regex
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+
+// validateEmail checks if the email format is valid
+func validateEmail(email string) error {
+	if email == "" {
+		return core.ErrEmailRequired
+	}
+	if !emailRegex.MatchString(email) {
+		return core.ErrInvalidEmail
+	}
+	return nil
+}
+
+// validatePassword checks if the password meets length and complexity requirements
+func validatePassword(password string) error {
+	if password == "" {
+		return core.ErrPasswordRequired
+	}
+	if len(password) < minPasswordLength {
+		return core.ErrPasswordTooShort
+	}
+	if len(password) > maxPasswordLength {
+		return core.ErrPasswordTooLong
+	}
+
+	// Check for at least one uppercase letter
+	hasUpper := false
+	for _, char := range password {
+		if char >= 'A' && char <= 'Z' {
+			hasUpper = true
+			break
+		}
+	}
+	if !hasUpper {
+		return core.ErrPasswordComplexity
+	}
+
+	// Check for at least one special character
+	specialChars := "!@#$%^&*()_+-=[]{}|;:',.<>?/~`\""
+	hasSpecial := false
+	for _, char := range password {
+		for _, special := range specialChars {
+			if char == special {
+				hasSpecial = true
+				break
+			}
+		}
+		if hasSpecial {
+			break
+		}
+	}
+	if !hasSpecial {
+		return core.ErrPasswordComplexity
+	}
+
+	return nil
+}
 
 // SessionManager handles both session management and authentication operations.
 // It combines session lifecycle (create, verify, destroy) with authentication
@@ -180,13 +245,13 @@ func (sm *SessionManager) DestroyAllUserSessions(userID string) (int, error) {
 // SignUp creates a new user account and session.
 func (sm *SessionManager) SignUp(input core.SignUpInput, ipAddress, userAgent string) (*core.SignUpResult, error) {
 	// Validate email
-	if input.Email == "" {
-		return nil, core.ErrEmailRequired
+	if err := validateEmail(input.Email); err != nil {
+		return nil, err
 	}
 
 	// Validate password
-	if input.Password == "" {
-		return nil, core.ErrPasswordRequired
+	if err := validatePassword(input.Password); err != nil {
+		return nil, err
 	}
 
 	// Check if user already exists
@@ -268,13 +333,13 @@ func (sm *SessionManager) SignUp(input core.SignUpInput, ipAddress, userAgent st
 // SignIn authenticates a user and creates a session.
 func (sm *SessionManager) SignIn(input core.SignInInput, ipAddress, userAgent string) (*core.SignInResult, error) {
 	// Validate email
-	if input.Email == "" {
-		return nil, core.ErrEmailRequired
+	if err := validateEmail(input.Email); err != nil {
+		return nil, err
 	}
 
 	// Validate password
-	if input.Password == "" {
-		return nil, core.ErrPasswordRequired
+	if err := validatePassword(input.Password); err != nil {
+		return nil, err
 	}
 
 	// Get user by email

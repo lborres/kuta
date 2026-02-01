@@ -1484,3 +1484,157 @@ func TestSessionManager_GetSession(t *testing.T) {
 		})
 	}
 }
+
+// Fuzz test for email validation to test regex robustness
+func FuzzValidateEmail(f *testing.F) {
+	// Seed corpus with known valid and invalid patterns
+	f.Add("user@example.com")
+	f.Add("test.user+tag@example.co.uk")
+	f.Add("invalid@")
+	f.Add("@example.com")
+	f.Add("user@.com")
+	f.Add("")
+	f.Add("user@example.")
+	f.Add("user name@example.com")
+	f.Add("user@ex ample.com")
+	f.Add("user@@example.com")
+	f.Add("user@example..com")
+	f.Add("user@-example.com")
+	f.Add("user@example.c")
+
+	f.Fuzz(func(t *testing.T, email string) {
+		err := validateEmail(email)
+
+		// The function should always return either nil or a known error
+		if err != nil && err != core.ErrEmailRequired && err != core.ErrInvalidEmail {
+			t.Errorf("unexpected error type: %v", err)
+		}
+
+		// Empty string should always return ErrEmailRequired
+		if email == "" && err != core.ErrEmailRequired {
+			t.Errorf("empty email should return ErrEmailRequired, got %v", err)
+		}
+
+		// Non-empty string should return either nil or ErrInvalidEmail
+		if email != "" && err != nil && err != core.ErrInvalidEmail {
+			t.Errorf("non-empty email should return nil or ErrInvalidEmail, got %v", err)
+		}
+
+		// Basic sanity checks: valid emails should have @ and .
+		if err == nil {
+			if email == "" {
+				t.Errorf("empty string should not be valid")
+			}
+			// Valid emails must contain @
+			hasAt := false
+			for _, c := range email {
+				if c == '@' {
+					hasAt = true
+					break
+				}
+			}
+			if !hasAt {
+				t.Errorf("email without @ should not be valid: %q", email)
+			}
+		}
+	})
+}
+
+// Fuzz test for password validation to test complexity requirements
+func FuzzValidatePassword(f *testing.F) {
+	// Seed corpus with various password patterns
+	f.Add("Password123!")
+	f.Add("short")
+	f.Add("")
+	f.Add("alllowercase123!")
+	f.Add("ALLUPPERCASE123!")
+	f.Add("NoSpecialChars123")
+	f.Add("Has!Special")
+	f.Add("P!")
+	f.Add("ValidPass1!")
+
+	// Generate a very long password for length testing
+	longPassword := ""
+	for i := 0; i < 150; i++ {
+		longPassword += "A"
+	}
+	f.Add(longPassword + "!")
+
+	f.Fuzz(func(t *testing.T, password string) {
+		err := validatePassword(password)
+
+		// The function should always return either nil or a known error
+		knownErrors := []error{
+			core.ErrPasswordRequired,
+			core.ErrPasswordTooShort,
+			core.ErrPasswordTooLong,
+			core.ErrPasswordComplexity,
+		}
+		if err != nil {
+			isKnown := false
+			for _, knownErr := range knownErrors {
+				if err == knownErr {
+					isKnown = true
+					break
+				}
+			}
+			if !isKnown {
+				t.Errorf("unexpected error type: %v", err)
+			}
+		}
+
+		// Empty string should always return ErrPasswordRequired
+		if password == "" && err != core.ErrPasswordRequired {
+			t.Errorf("empty password should return ErrPasswordRequired, got %v", err)
+		}
+
+		// Length checks
+		if len(password) > 0 && len(password) < minPasswordLength && err != core.ErrPasswordTooShort && err != core.ErrPasswordComplexity {
+			t.Errorf("password shorter than %d should return ErrPasswordTooShort or ErrPasswordComplexity, got %v", minPasswordLength, err)
+		}
+
+		if len(password) > maxPasswordLength && err != core.ErrPasswordTooLong {
+			t.Errorf("password longer than %d should return ErrPasswordTooLong, got %v", maxPasswordLength, err)
+		}
+
+		// If password is valid, verify it meets all requirements
+		if err == nil {
+			if len(password) < minPasswordLength {
+				t.Errorf("valid password should be at least %d chars, got %d", minPasswordLength, len(password))
+			}
+			if len(password) > maxPasswordLength {
+				t.Errorf("valid password should be at most %d chars, got %d", maxPasswordLength, len(password))
+			}
+
+			// Check uppercase requirement
+			hasUpper := false
+			for _, c := range password {
+				if c >= 'A' && c <= 'Z' {
+					hasUpper = true
+					break
+				}
+			}
+			if !hasUpper {
+				t.Errorf("valid password should have uppercase letter: %q", password)
+			}
+
+			// Check special character requirement
+			specialChars := "!@#$%^&*()_+-=[]{}|;:',.<>?/~`\""
+			hasSpecial := false
+			for _, c := range password {
+				for _, s := range specialChars {
+					if c == s {
+						hasSpecial = true
+						break
+					}
+				}
+				if hasSpecial {
+					break
+				}
+			}
+			if !hasSpecial {
+				t.Errorf("valid password should have special character: %q", password)
+			}
+		}
+	})
+}

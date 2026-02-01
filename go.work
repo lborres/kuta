@@ -3,4 +3,5 @@ go 1.25.4
 use (
   .
   ./examples/fiber-pgx-basic
+  ./tests/fiber-pgx-e2e
 )

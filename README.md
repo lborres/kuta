@@ -24,7 +24,7 @@ import (
 func main() {
   // ...your existing code
 
-  kuta, err = kuta.New(kuta.Config{
+  k, err = kuta.New(kuta.Config{
     Secret: "mysupersecretsecret",
 
     Database:      pgxadapter.New(pool),

@@ -52,6 +52,7 @@ var (
 	ErrPasswordRequired    = core.ErrPasswordRequired
 	ErrPasswordTooShort    = core.ErrPasswordTooShort
 	ErrPasswordTooLong     = core.ErrPasswordTooLong
+	ErrPasswordComplexity  = core.ErrPasswordComplexity
 	ErrInvalidEmail        = core.ErrInvalidEmail
 	ErrDBAdapterRequired   = core.ErrDBAdapterRequired
 	ErrHTTPAdapterRequired = core.ErrHTTPAdapterRequired

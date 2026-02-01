@@ -21,12 +21,13 @@ var (
 
 // Validation errors (client input)
 var (
-	ErrInvalidAuthHeader = errors.New("invalid authorization format, expected 'Bearer <token>'") // 401
-	ErrEmailRequired     = errors.New("email is required")                                       // 400
-	ErrPasswordRequired  = errors.New("password is required")                                    // 400
-	ErrPasswordTooShort  = errors.New("password is too short")                                   // 400
-	ErrPasswordTooLong   = errors.New("password is too long")                                    // 400
-	ErrInvalidEmail      = errors.New("invalid email format")                                    // 400
+	ErrInvalidAuthHeader  = errors.New("invalid authorization format, expected 'Bearer <token>'")                       // 401
+	ErrEmailRequired      = errors.New("email is required")                                                             // 400
+	ErrPasswordRequired   = errors.New("password is required")                                                          // 400
+	ErrPasswordTooShort   = errors.New("password is too short")                                                         // 400
+	ErrPasswordTooLong    = errors.New("password is too long")                                                          // 400
+	ErrPasswordComplexity = errors.New("password must contain at least one uppercase letter and one special character") // 400
+	ErrInvalidEmail       = errors.New("invalid email format")                                                          // 400
 )
 
 // Config errors (server-side configuration)
