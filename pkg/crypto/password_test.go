@@ -185,7 +185,7 @@ func TestArgon2_Parameters(t *testing.T) {
 		name       string
 		hasher     *Argon2
 		paramName  string
-		checkParam func(*Argon2, string) (interface{}, interface{})
+		checkParam func(*Argon2, string) (any, any)
 	}{
 		{
 			name: "memory 32MB",
@@ -197,7 +197,7 @@ func TestArgon2_Parameters(t *testing.T) {
 				KeyLength:   32,
 			},
 			paramName: "Memory",
-			checkParam: func(a *Argon2, _ string) (interface{}, interface{}) {
+			checkParam: func(a *Argon2, _ string) (any, any) {
 				hash, _ := a.Hash("test")
 				params, _, _, _ := decodeArgon2Hash(hash)
 				return params.Memory, uint32(32 * 1024)
@@ -213,7 +213,7 @@ func TestArgon2_Parameters(t *testing.T) {
 				KeyLength:   32,
 			},
 			paramName: "Iterations",
-			checkParam: func(a *Argon2, _ string) (interface{}, interface{}) {
+			checkParam: func(a *Argon2, _ string) (any, any) {
 				hash, _ := a.Hash("test")
 				params, _, _, _ := decodeArgon2Hash(hash)
 				return params.Iterations, uint32(5)
@@ -229,7 +229,7 @@ func TestArgon2_Parameters(t *testing.T) {
 				KeyLength:   32,
 			},
 			paramName: "Parallelism",
-			checkParam: func(a *Argon2, _ string) (interface{}, interface{}) {
+			checkParam: func(a *Argon2, _ string) (any, any) {
 				hash, _ := a.Hash("test")
 				params, _, _, _ := decodeArgon2Hash(hash)
 				return params.Parallelism, uint8(4)
@@ -245,7 +245,7 @@ func TestArgon2_Parameters(t *testing.T) {
 				KeyLength:   32,
 			},
 			paramName: "SaltLength",
-			checkParam: func(a *Argon2, _ string) (interface{}, interface{}) {
+			checkParam: func(a *Argon2, _ string) (any, any) {
 				hash, _ := a.Hash("test")
 				_, salt, _, _ := decodeArgon2Hash(hash)
 				return len(salt), 32
@@ -261,7 +261,7 @@ func TestArgon2_Parameters(t *testing.T) {
 				KeyLength:   64,
 			},
 			paramName: "KeyLength",
-			checkParam: func(a *Argon2, _ string) (interface{}, interface{}) {
+			checkParam: func(a *Argon2, _ string) (any, any) {
 				hash, _ := a.Hash("test")
 				_, _, hashBytes, _ := decodeArgon2Hash(hash)
 				return len(hashBytes), 64
@@ -289,8 +289,8 @@ func TestArgon2_New_Defaults(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		actual   interface{}
-		expected interface{}
+		actual   any
+		expected any
 	}{
 		{name: "memory 64MB", actual: a.Memory, expected: uint32(64 * 1024)},
 		{name: "iterations 3", actual: a.Iterations, expected: uint32(3)},

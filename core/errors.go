@@ -39,5 +39,6 @@ var (
 )
 
 var (
-	ErrNotImplemented = errors.New("not implemented") // 501
+	ErrNotImplemented     = errors.New("not implemented")      // 501
+	ErrInvalidRequestBody = errors.New("invalid request body") // 400
 )

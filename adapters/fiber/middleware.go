@@ -7,7 +7,7 @@ import (
 
 // BuildProtectedMiddleware creates a Fiber middleware that validates auth tokens
 // and stores user/session data in the context for downstream handlers
-func (a *Adapter) BuildProtectedMiddleware(authProvider core.AuthProvider) interface{} {
+func (a *Adapter) BuildProtectedMiddleware(authProvider core.AuthProvider) any {
 	return func(c fiber.Ctx) error {
 		token := extractToken(c, a.sessionCfg)
 		if token == "" {

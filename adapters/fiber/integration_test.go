@@ -3,6 +3,7 @@ package fiber
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -248,16 +249,23 @@ func setupTestApp(t *testing.T) (*fiber.App, *fakeStorage) {
 
 	sessionMgr := services.NewSessionManager(
 		core.SessionConfig{
-			ExpiresIn: time.Hour,
-			UpdateAge: 30 * time.Minute,
+			ExpiresIn:    time.Hour,
+			UpdateAge:    30 * time.Minute,
+			CookieConfig: core.DefaultCookieConfig(),
 		},
 		storage,
 		cache,
 		passwordMgr,
 	)
 
+	sessionCfg := &core.SessionConfig{
+		ExpiresIn:    time.Hour,
+		UpdateAge:    30 * time.Minute,
+		CookieConfig: core.DefaultCookieConfig(),
+	}
+
 	adapter := New(app)
-	if err := adapter.RegisterRoutes(sessionMgr, "/auth", nil); err != nil {
+	if err := adapter.RegisterRoutes(sessionMgr, "/auth", sessionCfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -270,7 +278,7 @@ func TestIntegration_SignUpFlow(t *testing.T) {
 
 	signUpBody, _ := json.Marshal(map[string]string{
 		"email":    "test@example.com",
-		"password": "password123",
+		"password": "Password123!",
 		"name":     "Test User",
 	})
 
@@ -283,7 +291,9 @@ func TestIntegration_SignUpFlow(t *testing.T) {
 	}
 
 	if resp.StatusCode != 201 {
-		t.Errorf("sign-up should return 201; got %d", resp.StatusCode)
+		// Read the error body
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("sign-up should return 201; got %d, body: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var result core.SignUpResult
@@ -309,7 +319,7 @@ func TestIntegration_SignUpDuplicateEmail(t *testing.T) {
 
 	signUpBody, _ := json.Marshal(map[string]string{
 		"email":    "duplicate@example.com",
-		"password": "password123",
+		"password": "Password123!",
 	})
 
 	// First sign-up
@@ -334,7 +344,7 @@ func TestIntegration_FullAuthFlow(t *testing.T) {
 	// Step 1: Sign up
 	signUpBody, _ := json.Marshal(map[string]string{
 		"email":    "fullflow@example.com",
-		"password": "password123",
+		"password": "Password123!",
 	})
 
 	req := httptest.NewRequest("POST", "/auth/sign-up", bytes.NewReader(signUpBody))
@@ -390,14 +400,14 @@ func TestIntegration_SignInFlow(t *testing.T) {
 	// Create user
 	signUpBody, _ := json.Marshal(map[string]string{
 		"email":    "signin@example.com",
-		"password": "password123",
+		"password": "Password123!",
 	})
 	req := httptest.NewRequest("POST", "/auth/sign-up", bytes.NewReader(signUpBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	signUpResp, _ := app.Test(req)
 	if signUpResp.StatusCode != 201 {
-		var errResp map[string]interface{}
+		var errResp map[string]any
 		json.NewDecoder(signUpResp.Body).Decode(&errResp)
 		t.Fatalf("sign-up failed with %d: %v", signUpResp.StatusCode, errResp)
 	}
@@ -419,14 +429,14 @@ func TestIntegration_SignInFlow(t *testing.T) {
 	// Sign in
 	signInBody, _ := json.Marshal(map[string]string{
 		"email":    "signin@example.com",
-		"password": "password123",
+		"password": "Password123!",
 	})
 	req = httptest.NewRequest("POST", "/auth/sign-in", bytes.NewReader(signInBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, _ := app.Test(req)
 	if resp.StatusCode != 200 {
-		var errResp map[string]interface{}
+		var errResp map[string]any
 		json.NewDecoder(resp.Body).Decode(&errResp)
 		t.Fatalf("sign-in should return 200; got %d: %v", resp.StatusCode, errResp)
 	}
@@ -445,7 +455,7 @@ func TestIntegration_SignInWrongPassword(t *testing.T) {
 	// Create user
 	signUpBody, _ := json.Marshal(map[string]string{
 		"email":    "wrongpass@example.com",
-		"password": "password123",
+		"password": "Password123!",
 	})
 	req := httptest.NewRequest("POST", "/auth/sign-up", bytes.NewReader(signUpBody))
 	req.Header.Set("Content-Type", "application/json")
@@ -454,7 +464,7 @@ func TestIntegration_SignInWrongPassword(t *testing.T) {
 	// Sign in with wrong password
 	signInBody, _ := json.Marshal(map[string]string{
 		"email":    "wrongpass@example.com",
-		"password": "wrongpassword",
+		"password": "WrongPassword!",
 	})
 	req = httptest.NewRequest("POST", "/auth/sign-in", bytes.NewReader(signInBody))
 	req.Header.Set("Content-Type", "application/json")
@@ -472,7 +482,7 @@ func TestIntegration_RefreshToken(t *testing.T) {
 	// Sign up
 	signUpBody, _ := json.Marshal(map[string]string{
 		"email":    "refresh@example.com",
-		"password": "password123",
+		"password": "Password123!",
 	})
 	req := httptest.NewRequest("POST", "/auth/sign-up", bytes.NewReader(signUpBody))
 	req.Header.Set("Content-Type", "application/json")

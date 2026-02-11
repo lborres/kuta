@@ -60,10 +60,10 @@ type AuthProvider interface {
 }
 
 type SignUpInput struct {
-	Email    string
-	Password string
-	Name     string
-	Image    *string
+	Email    string  `json:"email"`
+	Password string  `json:"password"`
+	Name     string  `json:"name"`
+	Image    *string `json:"image,omitempty"`
 }
 
 type SignUpResult struct {
@@ -73,8 +73,8 @@ type SignUpResult struct {
 }
 
 type SignInInput struct {
-	Email    string
-	Password string
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 type SignInResult struct {

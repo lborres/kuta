@@ -76,11 +76,11 @@ func TestSessionManager_Create(t *testing.T) {
 func TestSessionManager_Create_TokenHashNotExposed(t *testing.T) {
 	tests := []struct {
 		name          string
-		checkProperty func(map[string]interface{}) string // returns error message or empty string
+		checkProperty func(map[string]any) string // returns error message or empty string
 	}{
 		{
 			name: "TokenHash not in JSON",
-			checkProperty: func(m map[string]interface{}) string {
+			checkProperty: func(m map[string]any) string {
 				if _, exists := m["tokenHash"]; exists {
 					return "TokenHash exposed in JSON (security leak)"
 				}
@@ -89,7 +89,7 @@ func TestSessionManager_Create_TokenHashNotExposed(t *testing.T) {
 		},
 		{
 			name: "Token not in Session JSON",
-			checkProperty: func(m map[string]interface{}) string {
+			checkProperty: func(m map[string]any) string {
 				if _, exists := m["token"]; exists {
 					return "Token should not be in Session JSON"
 				}
@@ -98,7 +98,7 @@ func TestSessionManager_Create_TokenHashNotExposed(t *testing.T) {
 		},
 		{
 			name: "required fields present",
-			checkProperty: func(m map[string]interface{}) string {
+			checkProperty: func(m map[string]any) string {
 				required := []string{"id", "userId", "ipAddress", "userAgent", "expiresAt", "createdAt", "updatedAt"}
 				for _, field := range required {
 					if _, exists := m[field]; !exists {
@@ -134,7 +134,7 @@ func TestSessionManager_Create_TokenHashNotExposed(t *testing.T) {
 				t.Fatalf("json.Marshal() error = %v", err)
 			}
 
-			var sessionMap map[string]interface{}
+			var sessionMap map[string]any
 			if err := json.Unmarshal(jsonBytes, &sessionMap); err != nil {
 				t.Fatalf("json.Unmarshal() error = %v", err)
 			}

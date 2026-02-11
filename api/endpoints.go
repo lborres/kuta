@@ -18,7 +18,7 @@ func BaseEndpoints() []core.Endpoint {
 				OperationID: "signUpWithEmailAndPassword",
 				Description: "Sign up a user using email and password",
 				RequestBody: core.SignUpInput{},
-				Responses: map[int]interface{}{
+				Responses: map[int]any{
 					201: core.SignUpResult{},
 					400: core.ErrorResponse{},
 					409: core.ErrorResponse{},
@@ -32,7 +32,7 @@ func BaseEndpoints() []core.Endpoint {
 				OperationID: "signInWithEmailAndPassword",
 				Description: "Sign in a user using email and password",
 				RequestBody: core.SignInInput{},
-				Responses: map[int]interface{}{
+				Responses: map[int]any{
 					200: core.SignInResult{},
 					400: core.ErrorResponse{},
 					401: core.ErrorResponse{},
@@ -45,7 +45,7 @@ func BaseEndpoints() []core.Endpoint {
 			Metadata: core.EndpointMetadata{
 				OperationID: "signOut",
 				Description: "Sign out the current user and invalidate the session",
-				Responses: map[int]interface{}{
+				Responses: map[int]any{
 					200: map[string]string{"message": "signed out successfully"},
 					401: core.ErrorResponse{},
 				},
@@ -57,7 +57,7 @@ func BaseEndpoints() []core.Endpoint {
 			Metadata: core.EndpointMetadata{
 				OperationID: "getSession",
 				Description: "Get the current user's session data",
-				Responses: map[int]interface{}{
+				Responses: map[int]any{
 					200: core.SessionData{},
 					401: core.ErrorResponse{},
 				},
@@ -69,7 +69,7 @@ func BaseEndpoints() []core.Endpoint {
 			Metadata: core.EndpointMetadata{
 				OperationID: "refreshToken",
 				Description: "Refresh an expired or expiring authentication token",
-				Responses: map[int]interface{}{
+				Responses: map[int]any{
 					200: core.RefreshResult{},
 					401: core.ErrorResponse{},
 				},

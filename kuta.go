@@ -12,29 +12,32 @@ import (
 
 // Re-exports from core and services packages
 type (
-	StorageProvider  = core.StorageProvider
-	AuthProvider     = core.AuthProvider
-	Cache            = core.Cache
-	HTTPProvider     = core.HTTPProvider
-	EndpointProvider = core.EndpointProvider
-	Endpoint         = core.Endpoint
-	RequestContext   = core.RequestContext
-	EndpointMetadata = core.EndpointMetadata
-	PasswordHandler  = crypto.PasswordHandler
-	SessionConfig    = core.SessionConfig
-	CookieConfig     = core.CookieConfig
-	CacheConfig      = core.CacheConfig
-	User             = core.User
-	Account          = core.Account
-	Session          = core.Session
-	SessionData      = core.SessionData
-	CacheStats       = core.CacheStats
-	ErrorResponse    = core.ErrorResponse
-	SignUpInput      = core.SignUpInput
-	SignUpResult     = core.SignUpResult
-	SignInInput      = core.SignInInput
-	SignInResult     = core.SignInResult
-	RefreshResult    = core.RefreshResult
+	StorageProvider    = core.StorageProvider
+	AuthProvider       = core.AuthProvider
+	Cache              = core.Cache
+	HTTPProvider       = core.HTTPProvider
+	EndpointProvider   = core.EndpointProvider
+	Endpoint           = core.Endpoint
+	RequestContext     = core.RequestContext
+	EndpointMetadata   = core.EndpointMetadata
+	PluginEndpoint     = core.PluginEndpoint
+	PasswordHandler    = crypto.PasswordHandler
+	Plugin             = core.Plugin
+	PluginDependencies = core.PluginDependencies
+	SessionConfig      = core.SessionConfig
+	CookieConfig       = core.CookieConfig
+	CacheConfig        = core.CacheConfig
+	User               = core.User
+	Account            = core.Account
+	Session            = core.Session
+	SessionData        = core.SessionData
+	CacheStats         = core.CacheStats
+	ErrorResponse      = core.ErrorResponse
+	SignUpInput        = core.SignUpInput
+	SignUpResult       = core.SignUpResult
+	SignInInput        = core.SignInInput
+	SignInResult       = core.SignInResult
+	RefreshResult      = core.RefreshResult
 )
 
 // Errors
@@ -59,6 +62,7 @@ var (
 	ErrSecretRequired      = core.ErrSecretRequired
 	ErrSecretTooShort      = core.ErrSecretTooShort
 	ErrNotImplemented      = core.ErrNotImplemented
+	ErrInvalidRequestBody  = core.ErrInvalidRequestBody
 )
 
 // Constructors
@@ -77,6 +81,7 @@ type Config struct {
 	Secret          string
 	Database        StorageProvider
 	HTTP            HTTPProvider
+	Plugins         []Plugin
 	SessionConfig   *SessionConfig
 	CookieConfig    *CookieConfig
 	PasswordHandler PasswordHandler
@@ -87,7 +92,7 @@ type Config struct {
 
 // Kuta is the main auth instance
 type Kuta struct {
-	Protected    interface{}
+	Protected    any
 	authProvider AuthProvider
 	httpAdapter  HTTPProvider
 }
@@ -145,6 +150,20 @@ func New(config Config) (*Kuta, error) {
 		config.PasswordHandler,
 	)
 
+	// Initialize plugins
+	for _, plugin := range config.Plugins {
+		deps := core.PluginDependencies{
+			Storage:       config.Database,
+			Auth:          sessionService,
+			Passwords:     config.PasswordHandler,
+			Secret:        config.Secret,
+			SessionConfig: config.SessionConfig,
+		}
+		if err := plugin.Init(deps); err != nil {
+			return nil, fmt.Errorf("failed to initialize plugin %s: %w", plugin.ID(), err)
+		}
+	}
+
 	// Register HTTP routes
 	if err := config.HTTP.RegisterRoutes(
 		sessionService,
@@ -152,6 +171,19 @@ func New(config Config) (*Kuta, error) {
 		config.SessionConfig,
 	); err != nil {
 		return nil, err
+	}
+
+	// Register plugin endpoints (auto-discovered from PluginWithEndpoints)
+	for _, plugin := range config.Plugins {
+		if ep, ok := plugin.(core.PluginWithEndpoints); ok {
+			if err := config.HTTP.RegisterPluginEndpoints(
+				config.BasePath,
+				plugin.ID(),
+				ep.Endpoints(),
+			); err != nil {
+				return nil, fmt.Errorf("failed to register endpoints for plugin %s: %w", plugin.ID(), err)
+			}
+		}
 	}
 
 	return &Kuta{
