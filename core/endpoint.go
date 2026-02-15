@@ -58,6 +58,12 @@ type RequestContext struct {
 
 	// Response is the value to serialize as the JSON response body.
 	Response any
+
+	// SetCookies maps cookie names to values for cookies that should be set.
+	SetCookies map[string]string
+
+	// ClearCookies lists cookie names that should be cleared.
+	ClearCookies []string
 }
 
 // Bind decodes the JSON body into the target struct.
