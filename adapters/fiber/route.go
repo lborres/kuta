@@ -33,7 +33,7 @@ func (a *Adapter) RegisterRoutes(provider core.AuthProvider, basePath string, se
 	a.sessionCfg = sessionCfg
 
 	// Use framework-agnostic core handlers
-	coreHandlers := &core.CoreAuthHandlers{
+	coreHandlers := &api.CoreAuthHandlers{
 		Provider:   provider,
 		SessionCfg: sessionCfg,
 	}
@@ -42,24 +42,7 @@ func (a *Adapter) RegisterRoutes(provider core.AuthProvider, basePath string, se
 	group := a.app.Group(basePath)
 	endpoints := coreHandlers.GetCoreEndpoints()
 
-	for _, ep := range endpoints {
-		handler := a.wrapPluginHandler(ep)
-
-		switch ep.Method {
-		case "GET":
-			group.Get(ep.Path, handler)
-		case "POST":
-			group.Post(ep.Path, handler)
-		case "PUT":
-			group.Put(ep.Path, handler)
-		case "DELETE":
-			group.Delete(ep.Path, handler)
-		case "PATCH":
-			group.Patch(ep.Path, handler)
-		}
-	}
-
-	return nil
+	return a.registerEndpoints(group, endpoints)
 }
 
 // RegisterPluginEndpoints registers a plugin's self-contained endpoints.
@@ -68,6 +51,11 @@ func (a *Adapter) RegisterPluginEndpoints(basePath string, pluginID string, endp
 	prefix := basePath + "/" + pluginID
 	group := a.app.Group(prefix)
 
+	return a.registerEndpoints(group, endpoints)
+}
+
+// registerEndpoints is a helper that registers a slice of endpoints to a Fiber group.
+func (a *Adapter) registerEndpoints(group fiber.Router, endpoints []core.PluginEndpoint) error {
 	for _, ep := range endpoints {
 		handler := a.wrapPluginHandler(ep)
 
@@ -151,21 +139,12 @@ func (a *Adapter) wrapPluginHandler(ep core.PluginEndpoint) fiber.Handler {
 			})
 		}
 
-		// Handle cookie actions if present
-		if rctx.Response != nil {
-			if respMap, ok := rctx.Response.(map[string]any); ok {
-				if cookieAction, exists := respMap["_cookieAction"]; exists {
-					if action, ok := cookieAction.(*core.CookieAction); ok {
-						if action.Action == "set" {
-							a.setAuthCookie(c, action.Name, action.Value)
-						} else if action.Action == "clear" {
-							a.clearAuthCookie(c, action.Name)
-						}
-						// Remove _cookieAction from response before sending
-						delete(respMap, "_cookieAction")
-					}
-				}
-			}
+		// Handle cookie operations
+		for name, value := range rctx.SetCookies {
+			a.setAuthCookie(c, name, value)
+		}
+		for _, name := range rctx.ClearCookies {
+			a.clearAuthCookie(c, name)
 		}
 
 		// Write response

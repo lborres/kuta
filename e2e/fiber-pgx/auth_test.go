@@ -617,16 +617,15 @@ func TestE2E_SignUp_ValidatesPasswordLength(t *testing.T) {
 	}
 }
 
-// Requirement: E2E sign-out is idempotent (returns 200 even for invalid/non-existent tokens)
-// NOTE: Current implementation is idempotent - always returns 200 for sign-out attempts
-func TestE2E_SignOut_IsIdempotent(t *testing.T) {
+// Requirement: E2E sign-out requires valid authentication
+func TestE2E_SignOut_RequiresAuthentication(t *testing.T) {
 	tests := []struct {
 		name     string
 		token    string
 		wantCode int
 	}{
-		{name: "returns 401 without token", token: "", wantCode: 401}, // Missing token still requires auth header
-		{name: "returns 200 with invalid token (idempotent)", token: "invalid-token", wantCode: 200},
+		{name: "returns 401 without token", token: "", wantCode: 401},
+		{name: "returns 401 with invalid token", token: "invalid-token", wantCode: 401},
 	}
 
 	for _, test := range tests {
@@ -650,9 +649,8 @@ func TestE2E_SignOut_IsIdempotent(t *testing.T) {
 	}
 }
 
-// Requirement: E2E sign-out is idempotent - can call multiple times
-// NOTE: This documents that sign-out is idempotent by design
-func TestE2E_SignOut_MultipleTimesSucceeds(t *testing.T) {
+// Requirement: E2E sign-out invalidates the session and cannot be repeated
+func TestE2E_SignOut_CannotBeRepeatedWithSameToken(t *testing.T) {
 	email := uniqueEmail("double-signout")
 	password := "SecurePass123!"
 
@@ -682,7 +680,7 @@ func TestE2E_SignOut_MultipleTimesSucceeds(t *testing.T) {
 		t.Fatalf("first sign-out failed with status %d", signOutResp1.StatusCode)
 	}
 
-	// Act: Sign out again with same token (idempotent operation)
+	// Act: Try to sign out again with same token
 	signOutReq2, _ := http.NewRequest("POST", baseURL+"/api/auth/sign-out", nil)
 	signOutReq2.Header.Set("Authorization", "Bearer "+token)
 	signOutResp2, err := client.Do(signOutReq2)
@@ -691,23 +689,13 @@ func TestE2E_SignOut_MultipleTimesSucceeds(t *testing.T) {
 	}
 	defer signOutResp2.Body.Close()
 
-	// Assert: Second sign-out should also succeed (idempotent)
-	if signOutResp2.StatusCode != 200 {
+	// Assert: Second sign-out should fail (session is gone)
+	if signOutResp2.StatusCode != 401 {
 		respBody, _ := io.ReadAll(signOutResp2.Body)
-		t.Fatalf("expected status 200 for second sign-out (idempotent); got %d. Response: %s", signOutResp2.StatusCode, string(respBody))
+		t.Fatalf("expected status 401 for second sign-out (session already invalidated); got %d. Response: %s", signOutResp2.StatusCode, string(respBody))
 	}
 
-	// Verify the session is actually invalid by trying to use it
-	sessionReq, _ := http.NewRequest("GET", baseURL+"/api/auth/session", nil)
-	sessionReq.Header.Set("Authorization", "Bearer "+token)
-	sessionResp, _ := client.Do(sessionReq)
-	sessionResp.Body.Close()
-
-	if sessionResp.StatusCode != 401 {
-		t.Errorf("expected session to be invalid after sign-out; got status %d", sessionResp.StatusCode)
-	}
-
-	t.Log("✅ Sign-out is idempotent - can be called multiple times")
+	t.Log("✅ Sign-out invalidates session - cannot be repeated")
 }
 
 // Requirement: E2E refresh without token returns 401

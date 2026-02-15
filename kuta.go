@@ -6,38 +6,39 @@ import (
 
 	"github.com/lborres/kuta/core"
 	"github.com/lborres/kuta/pkg/cache"
+	"github.com/lborres/kuta/pkg/cookie"
 	"github.com/lborres/kuta/pkg/crypto"
 	"github.com/lborres/kuta/services"
 )
 
 // Re-exports from core and services packages
 type (
-	StorageProvider    = core.StorageProvider
-	AuthProvider       = core.AuthProvider
-	Cache              = core.Cache
-	HTTPProvider       = core.HTTPProvider
-	EndpointProvider   = core.EndpointProvider
-	Endpoint           = core.Endpoint
-	RequestContext     = core.RequestContext
-	EndpointMetadata   = core.EndpointMetadata
-	PluginEndpoint     = core.PluginEndpoint
-	PasswordHandler    = crypto.PasswordHandler
+	// Config types - needed for kuta.New(kuta.Config{...})
+	StorageProvider = core.StorageProvider
+	HTTPProvider    = core.HTTPProvider
+	Cache           = core.Cache
+	PasswordHandler = crypto.PasswordHandler
+	SessionConfig   = core.SessionConfig
+	CookieConfig    = core.CookieConfig
+	CacheConfig     = core.CacheConfig
+
+	// Plugin types - needed for plugin development
 	Plugin             = core.Plugin
 	PluginDependencies = core.PluginDependencies
-	SessionConfig      = core.SessionConfig
-	CookieConfig       = core.CookieConfig
-	CacheConfig        = core.CacheConfig
-	User               = core.User
-	Account            = core.Account
-	Session            = core.Session
-	SessionData        = core.SessionData
-	CacheStats         = core.CacheStats
-	ErrorResponse      = core.ErrorResponse
-	SignUpInput        = core.SignUpInput
-	SignUpResult       = core.SignUpResult
-	SignInInput        = core.SignInInput
-	SignInResult       = core.SignInResult
-	RefreshResult      = core.RefreshResult
+	PluginEndpoint     = core.PluginEndpoint
+	RequestContext     = core.RequestContext
+
+	// Domain types - returned from AuthProvider methods
+	User        = core.User
+	Session     = core.Session
+	SessionData = core.SessionData
+
+	// Result types - needed for custom AuthProvider implementations
+	SignUpInput   = core.SignUpInput
+	SignUpResult  = core.SignUpResult
+	SignInInput   = core.SignInInput
+	SignInResult  = core.SignInResult
+	RefreshResult = core.RefreshResult
 )
 
 // Errors
@@ -93,7 +94,7 @@ type Config struct {
 // Kuta is the main auth instance
 type Kuta struct {
 	Protected    any
-	authProvider AuthProvider
+	authProvider core.AuthProvider
 	httpAdapter  HTTPProvider
 }
 
@@ -131,7 +132,7 @@ func New(config Config) (*Kuta, error) {
 	if config.CookieConfig != nil {
 		config.SessionConfig.CookieConfig = config.CookieConfig
 	} else {
-		config.SessionConfig.CookieConfig = core.DefaultCookieConfig()
+		config.SessionConfig.CookieConfig = cookie.DefaultConfig()
 	}
 
 	if config.PasswordHandler == nil {

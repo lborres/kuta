@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 const DefaultSessionTokenName = "kuta.session_token"
 const DefaultSessionDataName = "kuta.session_data"
 
@@ -17,7 +19,7 @@ type SessionToken struct {
 
 type SessionDataCookie struct {
 	Name        string
-	SessionData SessionData
+	SessionData any // SessionData type, avoiding field/type name conflict
 }
 
 // CookieConfig defines how session tokens are stored in cookies
@@ -26,19 +28,9 @@ type CookieConfig struct {
 	SessionDataCookie SessionDataCookie
 }
 
-func DefaultCookieConfig() *CookieConfig {
-	return &CookieConfig{
-		SessionToken: SessionToken{
-			Name: DefaultSessionTokenName,
-			Attributes: SessionTokenAttributes{
-				HTTPOnly: true,
-				Secure:   true,
-				SameSite: "lax",
-				Path:     "/",
-			},
-		},
-		SessionDataCookie: SessionDataCookie{
-			Name: DefaultSessionDataName,
-		},
-	}
+// CookieCacheConfig defines behavior for client-side session caching in cookies
+type CookieCacheConfig struct {
+	Enabled   bool
+	MaxAge    time.Duration
+	UpdateAge time.Duration
 }
