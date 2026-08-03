@@ -28,6 +28,7 @@ var (
 	ErrPasswordTooLong    = errors.New("password is too long")                                                          // 400
 	ErrPasswordComplexity = errors.New("password must contain at least one uppercase letter and one special character") // 400
 	ErrInvalidEmail       = errors.New("invalid email format")                                                          // 400
+	ErrNameTooLong        = errors.New("name is too long")                                                              // 400
 )
 
 // Config errors (server-side configuration)

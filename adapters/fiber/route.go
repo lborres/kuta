@@ -7,14 +7,16 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/lborres/kuta/api"
 	"github.com/lborres/kuta/core"
+	"github.com/lborres/kuta/pkg/ratelimit"
 )
 
 // Adapter integrates kuta authentication with Fiber
 type Adapter struct {
-	app        *fiber.App
-	provider   core.AuthProvider
-	sessionCfg *core.SessionConfig
-	registry   *api.EndpointRegistry
+	app         *fiber.App
+	provider    core.AuthProvider
+	sessionCfg  *core.SessionConfig
+	registry    *api.EndpointRegistry
+	rateLimiter *ratelimit.Limiter
 }
 
 var _ core.HTTPProvider = (*Adapter)(nil)
@@ -22,8 +24,9 @@ var _ core.HTTPProvider = (*Adapter)(nil)
 // New creates a Fiber adapter
 func New(app *fiber.App) *Adapter {
 	return &Adapter{
-		app:      app,
-		registry: api.NewEndpointRegistry(),
+		app:         app,
+		registry:    api.NewEndpointRegistry(),
+		rateLimiter: newAuthRateLimiter(),
 	}
 }
 
@@ -40,6 +43,10 @@ func (a *Adapter) RegisterRoutes(provider core.AuthProvider, basePath string, se
 
 	// Register core auth endpoints directly under basePath (no plugin ID prefix)
 	group := a.app.Group(basePath)
+
+	// Apply rate limiting to auth endpoints
+	group.Use(a.authRateLimitMiddleware(a.rateLimiter))
+
 	endpoints := coreHandlers.GetCoreEndpoints()
 
 	return a.registerEndpoints(group, endpoints)
@@ -100,6 +107,16 @@ func (a *Adapter) wrapPluginHandler(ep core.PluginEndpoint) fiber.Handler {
 		for _, name := range []string{"content-type", "authorization", "x-request-id"} {
 			if v := c.Get(name); v != "" {
 				rctx.Headers[name] = v
+			}
+		}
+
+		// Validate Content-Type for POST/PUT/PATCH requests with body
+		if ep.Method != "GET" && len(c.Body()) > 0 {
+			contentType := c.Get("Content-Type")
+			if contentType != "application/json" && contentType != "" {
+				return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+					"error": "invalid content type: expected application/json",
+				})
 			}
 		}
 
@@ -243,7 +260,8 @@ func mapErrorToStatus(err error) int {
 		core.ErrPasswordTooShort,
 		core.ErrPasswordTooLong,
 		core.ErrPasswordComplexity,
-		core.ErrInvalidEmail:
+		core.ErrInvalidEmail,
+		core.ErrNameTooLong:
 		return http.StatusBadRequest
 
 	case core.ErrUserExists:

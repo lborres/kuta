@@ -2,6 +2,7 @@ package services
 
 import (
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/lborres/kuta/core"
@@ -11,6 +12,8 @@ import (
 const (
 	minPasswordLength = 8
 	maxPasswordLength = 128
+	maxEmailLength    = 254 // RFC 5321 standard
+	maxNameLength     = 255 // Reasonable limit for user names
 )
 
 // Simple email validation regex
@@ -20,6 +23,13 @@ var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-
 func validateEmail(email string) error {
 	if email == "" {
 		return core.ErrEmailRequired
+	}
+	if len(email) > maxEmailLength {
+		return core.ErrInvalidEmail
+	}
+	// Reject emails containing HTML special characters
+	if strings.ContainsAny(email, "<>'\"") {
+		return core.ErrInvalidEmail
 	}
 	if !emailRegex.MatchString(email) {
 		return core.ErrInvalidEmail
@@ -70,6 +80,28 @@ func validatePassword(password string) error {
 	}
 
 	return nil
+}
+
+// validateName checks if the name meets length requirements
+func validateName(name string) error {
+	if len(name) > maxNameLength {
+		return core.ErrNameTooLong
+	}
+	return nil
+}
+
+// sanitizeInput removes HTML tags and dangerous characters from user input
+func sanitizeInput(input string) string {
+	// Strip HTML tags using regex
+	htmlTagRegex := regexp.MustCompile(`<[^>]*>`)
+	sanitized := htmlTagRegex.ReplaceAllString(input, "")
+
+	// Remove common XSS patterns
+	sanitized = strings.ReplaceAll(sanitized, "javascript:", "")
+	sanitized = strings.ReplaceAll(sanitized, "onerror=", "")
+	sanitized = strings.ReplaceAll(sanitized, "onload=", "")
+
+	return strings.TrimSpace(sanitized)
 }
 
 // SessionManager handles both session management and authentication operations.
@@ -254,6 +286,14 @@ func (sm *SessionManager) SignUp(input core.SignUpInput, ipAddress, userAgent st
 		return nil, err
 	}
 
+	// Validate name length
+	if err := validateName(input.Name); err != nil {
+		return nil, err
+	}
+
+	// Sanitize name input to prevent XSS
+	sanitizedName := sanitizeInput(input.Name)
+
 	// Check if user already exists
 	_, err := sm.storage.GetUserByEmail(input.Email)
 	if err == nil {
@@ -282,7 +322,7 @@ func (sm *SessionManager) SignUp(input core.SignUpInput, ipAddress, userAgent st
 	user := &core.User{
 		ID:        userID,
 		Email:     input.Email,
-		Name:      input.Name,
+		Name:      sanitizedName,
 		Image:     input.Image,
 		CreatedAt: now,
 		UpdatedAt: now,
